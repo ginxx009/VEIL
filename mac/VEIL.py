@@ -229,6 +229,8 @@ class HUD:
         self.listening = False
         self.hearing = ""
         self.listener = None
+
+    def boot(self):
         self._build_panel()
         self._build_status_item()
         self._bind_keys()
