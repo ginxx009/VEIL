@@ -94,7 +94,8 @@ def save_profile(profile: dict) -> None:
 def load_config() -> dict:
     file_cfg = _read_json(CONFIG, {})
     env_key = (
-        os.environ.get("XAI_API_KEY")
+        os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("XAI_API_KEY")
         or os.environ.get("GEMINI_API_KEY")
         or os.environ.get("GOOGLE_API_KEY")
         or ""
@@ -181,6 +182,8 @@ def _voice(mode: str) -> str:
 
 def _provider(api_key: str) -> str:
     key = (api_key or "").strip()
+    if key.startswith("sk-") or os.environ.get("OPENAI_API_KEY") == key:
+        return "openai"
     if key.startswith("AIza") or os.environ.get("GEMINI_API_KEY") == key:
         return "gemini"
     return "xai"
@@ -298,8 +301,30 @@ def _gemini_stream(api_key: str, system: str, user: str, max_tokens: int):
     raise RuntimeError(hint)
 
 
+def _oai_stream(api_key: str, system: str, user: str, max_tokens: int):
+    last = None
+    for model in ("gpt-4o-mini", "gpt-4.1-mini", "gpt-4o"):
+        try:
+            yield from _openai_stream(
+                "https://api.openai.com/v1/chat/completions",
+                api_key,
+                model,
+                system,
+                user,
+                max_tokens,
+            )
+            return
+        except urllib.error.HTTPError as e:
+            last = _http_err(e)
+            continue
+    raise RuntimeError(last or "OpenAI request failed")
+
+
 def _stream(api_key: str, system: str, user: str, max_tokens: int):
-    if _provider(api_key) == "gemini":
+    kind = _provider(api_key)
+    if kind == "openai":
+        yield from _oai_stream(api_key, system, user, max_tokens)
+    elif kind == "gemini":
         yield from _gemini_stream(api_key, system, user, max_tokens)
     else:
         yield from _xai_stream(api_key, system, user, max_tokens)
@@ -351,7 +376,7 @@ def stream_assist(profile: dict, transcript: str, question: str, kind: str, scre
         return
     key = cfg.get("api_key") or ""
     if not key:
-        raise RuntimeError("Add an xAI or Gemini API key in VEIL → Settings.")
+        raise RuntimeError("Add an OpenAI API key in VEIL → Settings.")
     system, user = _assist_prompts(profile, transcript, question, kind, screen_text)
     yield from _stream(key, system, user, 320 if kind == "screen" else 180)
 
@@ -390,7 +415,7 @@ def notes(profile: dict, transcript: str) -> dict:
             return {"ok": False, "error": str(e)}
     key = cfg.get("api_key") or ""
     if not key:
-        return {"ok": False, "error": "Add an xAI or Gemini API key in VEIL → Settings."}
+        return {"ok": False, "error": "Add an OpenAI API key in VEIL → Settings."}
     if not transcript.strip():
         return {
             "ok": True,
