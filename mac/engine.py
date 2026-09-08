@@ -103,11 +103,11 @@ def load_resume_file(path: str) -> str:
     suffix = p.suffix.lower()
     if suffix == ".pdf":
         try:
-            from Foundation import NSURL
-            from PDFKit import PDFDocument
+            from pypdf import PdfReader
 
-            doc = PDFDocument.alloc().initWithURL_(NSURL.fileURLWithPath_(str(p)))
-            text = str(doc.string() or "").strip()
+            reader = PdfReader(str(p))
+            text = "\n".join((page.extract_text() or "") for page in reader.pages)
+            text = text.strip()
             if text:
                 return text[:24000]
         except Exception as e:
