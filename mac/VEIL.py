@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """VEIL — macOS overlay copilot.
 
-A titled HUD window excluded from screen capture
-(NSWindowSharingNone + content protection). Menu bar extra + floating window.
-Does not join Zoom, Meet, or Teams.
+HUD window excluded from screen capture (NSWindowSharingNone).
+PyObjC 12 only allows ObjC-style methods on NSObject, so UI lives on a
+plain Python class and buttons target a thin action object.
 """
 
 from __future__ import annotations
@@ -14,8 +14,10 @@ if sys.platform != "darwin":
     sys.stderr.write("VEIL is a macOS overlay. Open it on a Mac.\n")
     sys.exit(1)
 
+import signal
 import threading
 import time
+import traceback
 
 from AppKit import (
     NSApp,
@@ -52,7 +54,7 @@ from AppKit import (
     NSWindowStyleMaskClosable,
     NSWindowStyleMaskTitled,
 )
-from Foundation import NSObject
+from Foundation import NSAttributedString, NSObject
 from PyObjCTools import AppHelper
 
 import engine
@@ -66,12 +68,10 @@ def rgba(r, g, b, a=1.0):
     return NSColor.colorWithCalibratedRed_green_blue_alpha_(r, g, b, a)
 
 
-COL_BG = rgba(0.035, 0.035, 0.043, 0.92)
 COL_CARD = rgba(0.075, 0.075, 0.086, 0.94)
 COL_TEXT = rgba(0.953, 0.949, 0.933)
 COL_MUTED = rgba(0.545, 0.545, 0.525)
 COL_SAGE = rgba(0.561, 0.686, 0.612)
-COL_LINE = rgba(0.953, 0.949, 0.933, 0.10)
 COL_RED = rgba(0.816, 0.439, 0.439)
 
 
@@ -120,15 +120,13 @@ def pill(title, frame, target, action, kind="ghost"):
     else:
         b.layer().setBackgroundColor_(COL_CARD.CGColor())
     color = COL_SAGE if kind == "sage" else COL_RED if kind == "danger" else COL_TEXT
-    attr = {
-        "NSFont": font(12, medium=True),
-        "NSColor": color,
-    }
-    from Foundation import NSAttributedString
-
-    b.setAttributedTitle_(NSAttributedString.alloc().initWithString_attributes_(title, attr))
+    b.setAttributedTitle_(
+        NSAttributedString.alloc().initWithString_attributes_(
+            title, {"NSFont": font(12, medium=True), "NSColor": color}
+        )
+    )
     b.setTarget_(target)
-    b.setAction_(action.decode() if isinstance(action, bytes) else action)
+    b.setAction_(action)
     return b
 
 
@@ -143,6 +141,22 @@ def veil_status_image():
     return None
 
 
+def multiline(frame, text):
+    scroll = NSScrollView.alloc().initWithFrame_(frame)
+    scroll.setHasVerticalScroller_(True)
+    scroll.setBorderType_(1)
+    scroll.setDrawsBackground_(True)
+    scroll.setBackgroundColor_(COL_CARD)
+    tv = NSTextView.alloc().initWithFrame_(scroll.contentView().bounds())
+    tv.setString_(text)
+    tv.setFont_(font(12))
+    tv.setTextColor_(COL_TEXT)
+    tv.setBackgroundColor_(COL_CARD)
+    tv.setAutomaticQuoteSubstitutionEnabled_(False)
+    scroll.setDocumentView_(tv)
+    return {"scroll": scroll, "tv": tv}
+
+
 class OverlayPanel(NSWindow):
     def canBecomeKeyWindow(self):
         return True
@@ -151,8 +165,54 @@ class OverlayPanel(NSWindow):
         return True
 
 
-class VeilApp(NSObject):
-    def start(self):
+class Actions(NSObject):
+    """ObjC target only. Every method is a selector ending in _."""
+
+    hud = None
+
+    def pickMode_(self, sender):
+        self.hud.pick_mode(int(sender.tag()))
+
+    def launch_(self, sender):
+        self.hud.launch()
+
+    def showSettings_(self, sender):
+        self.hud.show_settings()
+
+    def saveSettings_(self, sender):
+        self.hud.save_settings()
+
+    def backSettings_(self, sender):
+        self.hud.show_setup()
+
+    def showOverlay_(self, sender):
+        self.hud.show_overlay()
+
+    def hideOverlay_(self, sender):
+        self.hud.hide_overlay()
+
+    def toggleStealth_(self, sender):
+        self.hud.toggle_stealth()
+
+    def quit_(self, sender):
+        NSApp.terminate_(None)
+
+    def assist_(self, sender):
+        self.hud.assist()
+
+    def screen_(self, sender):
+        self.hud.screen()
+
+    def nextQuestion_(self, sender):
+        self.hud.next_question()
+
+    def endRoom_(self, sender):
+        self.hud.end_room()
+
+
+class HUD:
+    def __init__(self, actions: Actions):
+        self.actions = actions
         self.profile = engine.load_profile()
         self.stealth = True
         self.phase = "setup"
@@ -161,6 +221,9 @@ class VeilApp(NSObject):
         self.status = "idle"
         self.result = None
         self.error = None
+        self.started = time.time()
+
+    def boot(self):
         self._build_panel()
         self._build_status_item()
         self._bind_keys()
@@ -175,10 +238,9 @@ class VeilApp(NSObject):
         screen = NSScreen.mainScreen().visibleFrame()
         x = screen.origin.x + screen.size.width - W - 24
         y = screen.origin.y + screen.size.height - H - 24
-        style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
         panel = OverlayPanel.alloc().initWithContentRect_styleMask_backing_defer_(
             NSMakeRect(x, y, W, H),
-            style,
+            NSWindowStyleMaskTitled | NSWindowStyleMaskClosable,
             NSBackingStoreBuffered,
             False,
         )
@@ -205,7 +267,6 @@ class VeilApp(NSObject):
         panel.setContentView_(fx)
 
         self.panel = panel
-        self.root = fx
         self.body = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, W, H))
         fx.addSubview_(self.body)
 
@@ -213,38 +274,32 @@ class VeilApp(NSObject):
         for v in list(self.body.subviews()):
             v.removeFromSuperview()
 
-    def _chrome(self, title, stealth_kind):
+    def _chrome(self, title):
         bar = NSView.alloc().initWithFrame_(NSMakeRect(0, H - CHROME, W, CHROME))
         bar.setWantsLayer_(True)
         bar.layer().setBackgroundColor_(rgba(0.07, 0.07, 0.08, 0.5).CGColor())
         self.body.addSubview_(bar)
         self.body.addSubview_(label(title, NSMakeRect(14, H - 34, 210, 20), 12, muted=True, medium=True))
-        self.stealth_btn = pill(
-            "Stealth" if self.stealth else "Visible",
-            NSMakeRect(W - 188, H - 36, 78, 28),
-            self,
-            b"toggleStealth:",
-            "sage" if self.stealth else "ghost",
-        )
-        self.body.addSubview_(self.stealth_btn)
+        a = self.actions
         self.body.addSubview_(
-            pill("Hide", NSMakeRect(W - 102, H - 36, 44, 28), self, b"hideOverlay:", "ghost")
+            pill(
+                "Stealth" if self.stealth else "Visible",
+                NSMakeRect(W - 188, H - 36, 78, 28),
+                a,
+                "toggleStealth:",
+                "sage" if self.stealth else "ghost",
+            )
         )
-        self.body.addSubview_(
-            pill("End", NSMakeRect(W - 52, H - 36, 38, 28), self, b"endRoom:", "danger")
-        )
+        self.body.addSubview_(pill("Hide", NSMakeRect(W - 102, H - 36, 44, 28), a, "hideOverlay:", "ghost"))
+        self.body.addSubview_(pill("End", NSMakeRect(W - 52, H - 36, 38, 28), a, "endRoom:", "danger"))
 
     def show_setup(self):
         self.phase = "setup"
         self._clear_body()
+        a = self.actions
         self.body.addSubview_(label("VEIL", NSMakeRect(20, H - 56, 200, 28), 22, medium=True))
         self.body.addSubview_(
-            label(
-                "Mac overlay. Excluded from their screen share.",
-                NSMakeRect(20, H - 82, 380, 20),
-                12,
-                muted=True,
-            )
+            label("Mac overlay. Excluded from their screen share.", NSMakeRect(20, H - 82, 380, 20), 12, muted=True)
         )
         y = H - 130
         self.body.addSubview_(label("Your name", NSMakeRect(20, y, 180, 16), 11, muted=True))
@@ -258,76 +313,39 @@ class VeilApp(NSObject):
 
         y -= 78
         self.body.addSubview_(label("Mode", NSMakeRect(20, y, 180, 16), 11, muted=True))
-        self.mode_btns = {}
         x = 20
         for m, title in (("interview", "Interview"), ("sales", "Sales"), ("meeting", "Meeting")):
             kind = "sage" if self.profile.get("mode") == m else "ghost"
-            b = pill(title, NSMakeRect(x, y - 32, 118, 28), self, b"pickMode:", kind)
+            b = pill(title, NSMakeRect(x, y - 32, 118, 28), a, "pickMode:", kind)
             b.setTag_({"interview": 1, "sales": 2, "meeting": 3}[m])
             self.body.addSubview_(b)
-            self.mode_btns[m] = b
             x += 126
 
         y -= 78
         self.body.addSubview_(label("Resume / playbook", NSMakeRect(20, y, 380, 16), 11, muted=True))
-        self.resume_field = self._multiline(NSMakeRect(20, 168, 380, y - 20 - 168), self.profile.get("resume", ""))
+        self.resume_field = multiline(NSMakeRect(20, 168, 380, y - 20 - 168), self.profile.get("resume", ""))
         self.body.addSubview_(self.resume_field["scroll"])
-
         self.body.addSubview_(label("Job or meeting context", NSMakeRect(20, 148, 380, 16), 11, muted=True))
-        self.job_field = self._multiline(NSMakeRect(20, 64, 380, 80), self.profile.get("jobDescription", ""))
+        self.job_field = multiline(NSMakeRect(20, 64, 380, 80), self.profile.get("jobDescription", ""))
         self.body.addSubview_(self.job_field["scroll"])
-
-        self.body.addSubview_(
-            pill("Launch overlay", NSMakeRect(20, 18, 160, 32), self, b"launch:", "sage")
-        )
-        self.body.addSubview_(
-            pill("Settings", NSMakeRect(190, 18, 90, 32), self, b"showSettings:", "ghost")
-        )
-
-    def _multiline(self, frame, text):
-        scroll = NSScrollView.alloc().initWithFrame_(frame)
-        scroll.setHasVerticalScroller_(True)
-        scroll.setBorderType_(1)
-        scroll.setDrawsBackground_(True)
-        scroll.setBackgroundColor_(COL_CARD)
-        tv = NSTextView.alloc().initWithFrame_(scroll.contentView().bounds())
-        tv.setString_(text)
-        tv.setFont_(font(12))
-        tv.setTextColor_(COL_TEXT)
-        tv.setBackgroundColor_(COL_CARD)
-        tv.setAutomaticQuoteSubstitutionEnabled_(False)
-        scroll.setDocumentView_(tv)
-        return {"scroll": scroll, "tv": tv}
+        self.body.addSubview_(pill("Launch overlay", NSMakeRect(20, 18, 160, 32), a, "launch:", "sage"))
+        self.body.addSubview_(pill("Settings", NSMakeRect(190, 18, 90, 32), a, "showSettings:", "ghost"))
 
     def show_live(self):
         self.phase = "live"
         self._clear_body()
+        a = self.actions
         title = engine.MODE_COPY.get(self.profile.get("mode", "interview"), "VEIL")
-        self._chrome(title, "sage")
-
-        self.body.addSubview_(
-            pill("Assist", NSMakeRect(14, H - CHROME - 40, 70, 28), self, b"assist:", "ghost")
-        )
-        self.body.addSubview_(
-            pill("Screen", NSMakeRect(90, H - CHROME - 40, 70, 28), self, b"screen:", "ghost")
-        )
-        self.body.addSubview_(
-            pill("Next Q", NSMakeRect(166, H - CHROME - 40, 70, 28), self, b"nextQuestion:", "ghost")
-        )
-
+        self._chrome(title)
+        self.body.addSubview_(pill("Assist", NSMakeRect(14, H - CHROME - 40, 70, 28), a, "assist:", "ghost"))
+        self.body.addSubview_(pill("Screen", NSMakeRect(90, H - CHROME - 40, 70, 28), a, "screen:", "ghost"))
+        self.body.addSubview_(pill("Next Q", NSMakeRect(166, H - CHROME - 40, 70, 28), a, "nextQuestion:", "ghost"))
         self.prompt = field(NSMakeRect(14, H - CHROME - 84, 310, 32), "Ask, or ⌘↩")
-        self.prompt.setTarget_(self)
-        self.prompt.setAction_(b"assist:")
+        self.prompt.setTarget_(a)
+        self.prompt.setAction_("assist:")
         self.body.addSubview_(self.prompt)
-        self.body.addSubview_(pill("Go", NSMakeRect(332, H - CHROME - 84, 74, 32), self, b"assist:", "sage"))
+        self.body.addSubview_(pill("Go", NSMakeRect(332, H - CHROME - 84, 74, 32), a, "assist:", "sage"))
 
-        self.answer_label = label(
-            "Pop this over the call. Share Meet, Zoom, or your editor — never this overlay.",
-            NSMakeRect(18, FOOTER + 16, 384, H - CHROME - 120 - FOOTER),
-            13,
-            muted=True,
-        )
-        self.answer_label.setSelectable_(True)
         self.answer_scroll = NSScrollView.alloc().initWithFrame_(
             NSMakeRect(14, FOOTER + 12, 392, H - CHROME - 108 - FOOTER)
         )
@@ -339,9 +357,6 @@ class VeilApp(NSObject):
         self.answer_view.setDrawsBackground_(False)
         self.answer_view.setTextColor_(COL_TEXT)
         self.answer_view.setFont_(font(13))
-        self.answer_view.setString_(
-            "Overlay is excluded from capture.\n⌘↩ assist · ⌘⇧E stealth · ⌘⇧H hide\n\nShare the meeting window, not VEIL."
-        )
         self.answer_scroll.setDocumentView_(self.answer_view)
         self.body.addSubview_(self.answer_scroll)
 
@@ -349,19 +364,18 @@ class VeilApp(NSObject):
         bar.setWantsLayer_(True)
         bar.layer().setBackgroundColor_(rgba(0.07, 0.07, 0.08, 0.45).CGColor())
         self.body.addSubview_(bar)
+        self.body.addSubview_(pill("Hide overlay", NSMakeRect(14, 12, 110, 28), a, "hideOverlay:", "ghost"))
         self.body.addSubview_(
-            pill("Hide overlay", NSMakeRect(14, 12, 110, 28), self, b"hideOverlay:", "ghost")
-        )
-        self.body.addSubview_(
-            label("Menu bar extra · no dock icon", NSMakeRect(136, 16, 260, 20), 11, muted=True)
+            label("Share Meet / Zoom / editor — not this window", NSMakeRect(136, 16, 260, 20), 11, muted=True)
         )
         self._paint_answer()
 
     def show_settings(self):
         self.phase = "settings"
         self._clear_body()
-        self.body.addSubview_(label("Settings", NSMakeRect(20, H - 56, 200, 28), 22, medium=True))
+        a = self.actions
         cfg = engine.load_config()
+        self.body.addSubview_(label("Settings", NSMakeRect(20, H - 56, 200, 28), 22, medium=True))
         self.body.addSubview_(
             label("xAI API key (stored on this Mac only)", NSMakeRect(20, H - 100, 380, 16), 11, muted=True)
         )
@@ -374,15 +388,11 @@ class VeilApp(NSObject):
         self.url_field = field(NSMakeRect(20, H - 216, 380, 32), "https://…")
         self.url_field.setStringValue_(cfg.get("api_url", ""))
         self.body.addSubview_(self.url_field)
-        self.body.addSubview_(
-            pill("Save", NSMakeRect(20, H - 268, 90, 32), self, b"saveSettings:", "sage")
-        )
-        self.body.addSubview_(
-            pill("Back", NSMakeRect(120, H - 268, 90, 32), self, b"backSettings:", "ghost")
-        )
+        self.body.addSubview_(pill("Save", NSMakeRect(20, H - 268, 90, 32), a, "saveSettings:", "sage"))
+        self.body.addSubview_(pill("Back", NSMakeRect(120, H - 268, 90, 32), a, "backSettings:", "ghost"))
         self.body.addSubview_(
             label(
-                "The overlay window uses macOS capture exclusion. Zoom, Meet, and Teams will not composite it when stealth is on.",
+                "The overlay uses macOS capture exclusion. Zoom, Meet, and Teams will not composite it when stealth is on.",
                 NSMakeRect(20, 80, 380, 80),
                 12,
                 muted=True,
@@ -392,6 +402,7 @@ class VeilApp(NSObject):
     def show_notes(self, notes: dict):
         self.phase = "notes"
         self._clear_body()
+        a = self.actions
         self.body.addSubview_(label("Notes", NSMakeRect(20, H - 56, 200, 28), 22, medium=True))
         parts = [notes.get("summary", "")]
         if notes.get("keyPoints"):
@@ -400,11 +411,11 @@ class VeilApp(NSObject):
             parts.append("Actions\n" + "\n".join(f"• {p}" for p in notes["actionItems"]))
         if notes.get("followUpEmail"):
             parts.append("Follow-up\n" + notes["followUpEmail"])
-        box = self._multiline(NSMakeRect(16, 64, 388, H - 140), "\n\n".join(p for p in parts if p))
+        box = multiline(NSMakeRect(16, 64, 388, H - 140), "\n\n".join(p for p in parts if p))
         box["tv"].setEditable_(False)
         self.body.addSubview_(box["scroll"])
-        self.body.addSubview_(pill("New room", NSMakeRect(20, 18, 110, 32), self, b"backSettings:", "sage"))
-        self.body.addSubview_(pill("Hide", NSMakeRect(140, 18, 70, 32), self, b"hideOverlay:", "ghost"))
+        self.body.addSubview_(pill("New room", NSMakeRect(20, 18, 110, 32), a, "backSettings:", "sage"))
+        self.body.addSubview_(pill("Hide", NSMakeRect(140, 18, 70, 32), a, "hideOverlay:", "ghost"))
 
     def _paint_answer(self):
         if self.phase != "live":
@@ -447,16 +458,11 @@ class VeilApp(NSObject):
             except Exception:
                 pass
             self.panel.setSharingType_(NSWindowSharingReadOnly)
-        self._refresh_status_title()
-
-    def _refresh_status_title(self):
-        # Template icon only — tooltip carries state.
         if hasattr(self, "status_item"):
             self.status_item.setToolTip_("VEIL · stealth on" if self.stealth else "VEIL · visible on share")
 
     def _build_status_item(self):
-        bar = NSStatusBar.systemStatusBar()
-        item = bar.statusItemWithLength_(NSVariableStatusItemLength)
+        item = NSStatusBar.systemStatusBar().statusItemWithLength_(NSVariableStatusItemLength)
         item.setTitle_("VEIL")
         img = veil_status_image()
         if img is not None:
@@ -465,6 +471,7 @@ class VeilApp(NSObject):
         item.setToolTip_("VEIL overlay")
         menu = NSMenu.alloc().init()
         menu.setAutoenablesItems_(False)
+        a = self.actions
         pairs = [
             ("Show overlay", "showOverlay:"),
             ("Hide overlay", "hideOverlay:"),
@@ -480,15 +487,13 @@ class VeilApp(NSObject):
                 menu.addItem_(NSMenuItem.separatorItem())
                 continue
             it = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, action, "")
-            it.setTarget_(self)
+            it.setTarget_(a)
             menu.addItem_(it)
         item.setMenu_(menu)
         self.status_item = item
 
     def _bind_keys(self):
-        # Local only — a global monitor prompts Accessibility and can hang
-        # a script with no app bundle.
-        mask = 1 << 10  # NSEventMaskKeyDown
+        mask = 1 << 10
 
         def local_handler(event):
             self._handle_key(event)
@@ -498,27 +503,25 @@ class VeilApp(NSObject):
 
     def _handle_key(self, event):
         flags = int(event.modifierFlags())
-        cmd = bool(flags & (1 << 20))  # NSEventModifierFlagCommand
+        cmd = bool(flags & (1 << 20))
         shift = bool(flags & (1 << 17))
         chars = event.charactersIgnoringModifiers() or ""
         if not cmd:
             return
         if chars == "\r" and self.phase == "live":
-            self.assist_(None)
+            self.assist()
         if shift and chars.lower() == "e":
-            self.toggleStealth_(None)
+            self.toggle_stealth()
         if shift and chars.lower() == "h":
-            self.hideOverlay_(None)
+            self.hide_overlay()
         if shift and chars.lower() == "s" and self.phase == "live":
-            self.screen_(None)
+            self.screen()
 
-    def pickMode_(self, sender):
-        tag = int(sender.tag())
-        mode = {1: "interview", 2: "sales", 3: "meeting"}.get(tag, "interview")
-        self.profile["mode"] = mode
+    def pick_mode(self, tag: int):
+        self.profile["mode"] = {1: "interview", 2: "sales", 3: "meeting"}.get(tag, "interview")
         self.show_setup()
 
-    def launch_(self, sender):
+    def launch(self):
         self.profile["displayName"] = str(self.name_field.stringValue())
         self.profile["role"] = str(self.role_field.stringValue())
         self.profile["resume"] = str(self.resume_field["tv"].string())
@@ -532,10 +535,7 @@ class VeilApp(NSObject):
         self.started = time.time()
         self.show_live()
 
-    def showSettings_(self, sender):
-        self.show_settings()
-
-    def saveSettings_(self, sender):
+    def save_settings(self):
         engine.save_config(
             {
                 "api_key": str(self.key_field.stringValue()).strip(),
@@ -544,36 +544,30 @@ class VeilApp(NSObject):
         )
         self.show_setup()
 
-    def backSettings_(self, sender):
-        self.show_setup()
-
-    def showOverlay_(self, sender):
+    def show_overlay(self):
         self.panel.orderFrontRegardless()
+        NSApp.activateIgnoringOtherApps_(True)
 
-    def hideOverlay_(self, sender):
+    def hide_overlay(self):
         self.panel.orderOut_(None)
 
-    def toggleStealth_(self, sender):
+    def toggle_stealth(self):
         self.stealth = not self.stealth
         self.apply_stealth()
         if self.phase == "live":
             self.show_live()
 
-    def quit_(self, sender):
-        NSApp.terminate_(None)
-
-    def assist_(self, sender):
+    def assist(self):
         if self.phase != "live":
             return
-        q = str(self.prompt.stringValue())
-        self._run("answer", q, "")
+        self._run("answer", str(self.prompt.stringValue()), "")
 
-    def screen_(self, sender):
+    def screen(self):
         if self.phase != "live":
             return
         self._run("screen", str(self.prompt.stringValue()), engine.SCREEN_FALLBACK)
 
-    def nextQuestion_(self, sender):
+    def next_question(self):
         if self.phase != "live":
             return
         mode = self.profile.get("mode", "interview")
@@ -611,9 +605,9 @@ class VeilApp(NSObject):
 
         threading.Thread(target=work, daemon=True).start()
 
-    def endRoom_(self, sender):
+    def end_room(self):
         if self.phase == "setup":
-            self.hideOverlay_(None)
+            self.hide_overlay()
             return
         packed = "\n".join(self.transcript)
         self.status = "thinking"
@@ -650,17 +644,16 @@ class VeilApp(NSObject):
 
 
 def main():
-    import signal
-    import traceback
-
     print("Starting VEIL…", flush=True)
     try:
         app = NSApplication.sharedApplication()
         app.setActivationPolicy_(NSApplicationActivationPolicyRegular)
         app.setAppearance_(NSAppearance.appearanceNamed_("NSAppearanceNameDarkAqua"))
-        delegate = VeilApp.alloc().init()
-        app.setDelegate_(delegate)
-        delegate.start()
+        actions = Actions.alloc().init()
+        hud = HUD(actions)
+        actions.hud = hud
+        app.setDelegate_(actions)
+        hud.boot()
         print("This terminal stays busy while VEIL runs. Ctrl+C quits.", flush=True)
         signal.signal(signal.SIGINT, lambda *_: NSApp.terminate_(None))
         AppHelper.runEventLoop()
