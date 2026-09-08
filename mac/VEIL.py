@@ -229,6 +229,7 @@ class HUD:
         self.listening = False
         self.hearing = ""
         self.listener = None
+        self.pending_q = None
 
     def boot(self):
         self._build_panel()
@@ -441,39 +442,40 @@ class HUD:
     def _paint_answer(self):
         if self.phase != "live":
             return
-        if self.status == "thinking":
-            self.answer_view.setString_("Writing a speakable answer…")
-            self.answer_view.setTextColor_(COL_MUTED)
+        spoken = ""
+        if self.result:
+            spoken = self.result.get("spoken") or ""
+            points = self.result.get("points") or []
+            code = self.result.get("code") or ""
+            if points:
+                spoken = spoken + "\n\n" + "\n".join(f"• {p}" for p in points)
+            if code:
+                spoken = spoken + "\n\n" + code
+        if spoken:
+            self.answer_view.setString_(spoken)
+            self.answer_view.setTextColor_(COL_TEXT)
             return
         if self.status == "error":
             self.answer_view.setString_(self.error or "Could not generate an answer.")
             self.answer_view.setTextColor_(COL_RED)
             return
-        if self.result:
-            spoken = self.result.get("spoken", "")
-            points = self.result.get("points") or []
-            code = self.result.get("code") or ""
-            text = spoken
-            if points:
-                text += "\n\n" + "\n".join(f"• {p}" for p in points)
-            if code:
-                text += "\n\n" + code
-            self.answer_view.setString_(text)
-            self.answer_view.setTextColor_(COL_TEXT)
+        if self.status == "thinking":
+            self.answer_view.setString_("Writing a speakable answer…")
+            self.answer_view.setTextColor_(COL_MUTED)
             return
         if self.listening and self.hearing:
             self.answer_view.setTextColor_(COL_MUTED)
             self.answer_view.setString_("Hearing…\n" + self.hearing)
             return
-        if self.listening and self.status in ("idle", "ready") and not (self.result and self.result.get("spoken")):
+        if self.listening:
             self.answer_view.setTextColor_(COL_MUTED)
             self.answer_view.setString_(
-                "Listening.\nPlay their questions on speakers (not headphones).\nI answer ~1s after they stop talking."
+                "Listening continuously. Leave Mic on.\nPlay them on speakers. Click Mic only to stop."
             )
             return
         self.answer_view.setTextColor_(COL_MUTED)
         self.answer_view.setString_(
-            "Mic listens to the interviewer and writes a speakable answer.\n⌘⇧M mic · ⌘↩ assist · ⌘⇧E stealth"
+            "Mic stays on across questions. ⌘⇧M to start/stop · ⌘↩ assist"
         )
 
     def apply_stealth(self):
@@ -606,14 +608,71 @@ class HUD:
         self.transcript.append(f"them: {cleaned}")
         if hasattr(self, "prompt"):
             self.prompt.setStringValue_(cleaned)
+        if self.status == "thinking":
+            self.pending_q = cleaned
+            return
         self._run("answer", cleaned, "")
 
     def _heard_error(self, msg: str):
-        self._stop_mic()
-        self.status = "error"
+        # Keep the mic on for anything that is not a hard permission failure.
+        print(f"VEIL listen: {msg}", flush=True)
         self.error = msg
+        if "Allow" in msg or "grant" in msg.lower():
+            self._stop_mic()
+            self.status = "error"
+            if self.phase == "live":
+                self.show_live()
+            return
         if self.phase == "live":
-            self.show_live()
+            self._paint_answer()
+
+    def _run(self, kind, question, screen_text):
+        if self.status == "thinking":
+            self.pending_q = question
+            return
+        self.status = "thinking"
+        self.error = None
+        self.result = {"spoken": "", "points": [], "code": ""}
+        self._paint_answer()
+        packed = "\n".join(self.transcript)
+        profile = dict(self.profile)
+
+        def work():
+            acc = []
+            try:
+                for chunk in engine.stream_assist(profile, packed, question, kind, screen_text):
+                    acc.append(chunk)
+                    text = "".join(acc)
+
+                    def paint(t=text):
+                        self.result = {"spoken": t, "points": [], "code": ""}
+                        self._paint_answer()
+
+                    AppHelper.callAfter(paint)
+
+                def done():
+                    self.status = "ready"
+                    nxt = self.pending_q
+                    self.pending_q = None
+                    if nxt:
+                        self._run("answer", nxt, "")
+
+                AppHelper.callAfter(done)
+            except Exception as e:
+                msg = str(e)
+
+                def fail(m=msg):
+                    self.status = "error"
+                    self.error = m
+                    self._paint_answer()
+                    nxt = self.pending_q
+                    self.pending_q = None
+                    if nxt:
+                        self._run("answer", nxt, "")
+
+                AppHelper.callAfter(fail)
+
+        threading.Thread(target=work, daemon=True).start()
 
     def save_settings(self):
         engine.save_config(
@@ -657,41 +716,6 @@ class HUD:
         self.transcript.append(f"them: {q}")
         self.prompt.setStringValue_(q)
         self._run("answer", q, "")
-
-    def _run(self, kind, question, screen_text):
-        if self.status == "thinking":
-            return
-        self.status = "thinking"
-        self.error = None
-        self.result = {"spoken": "", "points": [], "code": ""}
-        self._paint_answer()
-        packed = "\n".join(self.transcript)
-        profile = dict(self.profile)
-
-        def work():
-            acc = []
-            try:
-                for chunk in engine.stream_assist(profile, packed, question, kind, screen_text):
-                    acc.append(chunk)
-                    text = "".join(acc)
-
-                    def paint(t=text):
-                        self.status = "ready"
-                        self.result = {"spoken": t, "points": [], "code": ""}
-                        self._paint_answer()
-
-                    AppHelper.callAfter(paint)
-            except Exception as e:
-                msg = str(e)
-
-                def fail(m=msg):
-                    self.status = "error"
-                    self.error = m
-                    self._paint_answer()
-
-                AppHelper.callAfter(fail)
-
-        threading.Thread(target=work, daemon=True).start()
 
     def end_room(self):
         self._stop_mic()

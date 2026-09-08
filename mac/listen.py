@@ -43,6 +43,7 @@ class Listener:
         self._lock = threading.Lock()
         self._got_audio = False
         self._auth_done = False
+        self._gen = 0
 
     def start(self):
         if _IMPORT_ERROR is not None:
@@ -64,9 +65,10 @@ class Listener:
                 )
                 return
             if self.running and not self._got_audio:
+                print("VEIL: still listening, but no speech yet. Use speakers.", flush=True)
                 _main(
-                    lambda: self.on_error(
-                        "Mic is on but I hear nothing. Play Gemini Live / Zoom on speakers (not headphones) so the Mac mic can hear them."
+                    lambda: self.on_partial(
+                        "Waiting for speech… play them on speakers, not headphones."
                     )
                 )
 
@@ -167,6 +169,8 @@ class Listener:
     def _start_task(self):
         if not self.running or self._recognizer is None:
             return
+        self._gen += 1
+        gen = self._gen
         if self._task is not None:
             try:
                 self._task.cancel()
@@ -175,17 +179,17 @@ class Listener:
         request = SFSpeechAudioBufferRecognitionRequest.alloc().init()
         request.setShouldReportPartialResults_(True)
         try:
-            request.setTaskHint_(1)  # dictation
+            request.setTaskHint_(1)
         except Exception:
             pass
-        # On-device often returns nothing. Use Apple's servers.
         self._request = request
 
         def handler(result, error):
-            if not self.running:
+            if gen != self._gen or not self.running:
                 return
             if error is not None:
-                print(f"VEIL: speech error {error}", flush=True)
+                print(f"VEIL: speech cycle ended ({error}) — listening for the next question", flush=True)
+                self._restart_soon()
                 return
             if result is None:
                 return
@@ -194,13 +198,21 @@ class Listener:
                 return
             self._got_audio = True
             print(f"VEIL heard: {text}", flush=True)
-            if result.isFinal():
-                self._arm_flush(text, immediate=True)
-            else:
-                self._arm_flush(text, immediate=False)
+            self._arm_flush(text, immediate=bool(result.isFinal()))
 
         self._handler = handler
         self._task = self._recognizer.recognitionTaskWithRequest_resultHandler_(request, handler)
+
+    def _restart_soon(self):
+        if not self.running:
+            return
+
+        def go():
+            time.sleep(0.2)
+            if self.running:
+                _main(self._start_task)
+
+        threading.Thread(target=go, daemon=True).start()
 
     def _arm_flush(self, text: str, immediate: bool):
         with self._lock:
@@ -234,3 +246,4 @@ class Listener:
         self._last_final = text
         print(f"VEIL question: {text}", flush=True)
         self.on_final(text)
+        self._restart_soon()
