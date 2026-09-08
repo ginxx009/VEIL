@@ -58,6 +58,7 @@ from Foundation import NSAttributedString, NSObject
 from PyObjCTools import AppHelper
 
 import engine
+import listen
 
 W, H = 420, 580
 CHROME = 44
@@ -209,6 +210,9 @@ class Actions(NSObject):
     def endRoom_(self, sender):
         self.hud.end_room()
 
+    def toggleMic_(self, sender):
+        self.hud.toggle_mic()
+
 
 class HUD:
     def __init__(self, actions: Actions):
@@ -222,8 +226,9 @@ class HUD:
         self.result = None
         self.error = None
         self.started = time.time()
-
-    def boot(self):
+        self.listening = False
+        self.hearing = ""
+        self.listener = None
         self._build_panel()
         self._build_status_item()
         self._bind_keys()
@@ -337,9 +342,18 @@ class HUD:
         a = self.actions
         title = engine.MODE_COPY.get(self.profile.get("mode", "interview"), "VEIL")
         self._chrome(title)
-        self.body.addSubview_(pill("Assist", NSMakeRect(14, H - CHROME - 40, 70, 28), a, "assist:", "ghost"))
-        self.body.addSubview_(pill("Screen", NSMakeRect(90, H - CHROME - 40, 70, 28), a, "screen:", "ghost"))
-        self.body.addSubview_(pill("Next Q", NSMakeRect(166, H - CHROME - 40, 70, 28), a, "nextQuestion:", "ghost"))
+        self.body.addSubview_(pill("Assist", NSMakeRect(14, H - CHROME - 40, 64, 28), a, "assist:", "ghost"))
+        self.body.addSubview_(pill("Screen", NSMakeRect(84, H - CHROME - 40, 64, 28), a, "screen:", "ghost"))
+        self.body.addSubview_(pill("Next Q", NSMakeRect(154, H - CHROME - 40, 64, 28), a, "nextQuestion:", "ghost"))
+        self.body.addSubview_(
+            pill(
+                "Listening" if self.listening else "Mic",
+                NSMakeRect(224, H - CHROME - 40, 88, 28),
+                a,
+                "toggleMic:",
+                "sage" if self.listening else "ghost",
+            )
+        )
         self.prompt = field(NSMakeRect(14, H - CHROME - 84, 310, 32), "Ask, or ⌘↩")
         self.prompt.setTarget_(a)
         self.prompt.setAction_("assist:")
@@ -366,7 +380,12 @@ class HUD:
         self.body.addSubview_(bar)
         self.body.addSubview_(pill("Hide overlay", NSMakeRect(14, 12, 110, 28), a, "hideOverlay:", "ghost"))
         self.body.addSubview_(
-            label("Share Meet / Zoom / editor — not this window", NSMakeRect(136, 16, 260, 20), 11, muted=True)
+            label(
+                "Listening — answers when they finish a question" if self.listening else "Share Meet / Zoom / editor — not this window",
+                NSMakeRect(136, 16, 260, 20),
+                11,
+                muted=True,
+            )
         )
         self._paint_answer()
 
@@ -440,9 +459,17 @@ class HUD:
             self.answer_view.setString_(text)
             self.answer_view.setTextColor_(COL_TEXT)
             return
+        if self.listening and self.hearing and self.status in ("idle",):
+            self.answer_view.setTextColor_(COL_MUTED)
+            self.answer_view.setString_("Listening…\n" + self.hearing)
+            return
+        if self.listening and self.status == "idle" and not self.result:
+            self.answer_view.setTextColor_(COL_MUTED)
+            self.answer_view.setString_("Listening. They speak — VEIL answers when the question ends.")
+            return
         self.answer_view.setTextColor_(COL_MUTED)
         self.answer_view.setString_(
-            "Overlay is excluded from capture.\n⌘↩ assist · ⌘⇧E stealth · ⌘⇧H hide\n\nShare the meeting window, not VEIL."
+            "Mic listens to the interviewer and writes a speakable answer.\n⌘⇧M mic · ⌘↩ assist · ⌘⇧E stealth"
         )
 
     def apply_stealth(self):
@@ -477,6 +504,7 @@ class HUD:
             ("Hide overlay", "hideOverlay:"),
             (None, None),
             ("Toggle stealth", "toggleStealth:"),
+            ("Toggle mic", "toggleMic:"),
             ("Next question", "nextQuestion:"),
             (None, None),
             ("Settings", "showSettings:"),
@@ -516,6 +544,8 @@ class HUD:
             self.hide_overlay()
         if shift and chars.lower() == "s" and self.phase == "live":
             self.screen()
+        if shift and chars.lower() == "m" and self.phase == "live":
+            self.toggle_mic()
 
     def pick_mode(self, tag: int):
         self.profile["mode"] = {1: "interview", 2: "sales", 3: "meeting"}.get(tag, "interview")
@@ -533,7 +563,54 @@ class HUD:
         self.result = None
         self.error = None
         self.started = time.time()
+        self._stop_mic()
         self.show_live()
+
+    def toggle_mic(self):
+        if self.phase != "live":
+            return
+        if self.listening:
+            self._stop_mic()
+            self.show_live()
+            return
+        self.listening = True
+        self.hearing = ""
+        self.listener = listen.Listener(self._heard_partial, self._heard_final, self._heard_error)
+        self.show_live()
+        self.listener.start()
+
+    def _stop_mic(self):
+        self.listening = False
+        self.hearing = ""
+        if self.listener is not None:
+            self.listener.stop()
+            self.listener = None
+
+    def _heard_partial(self, text: str):
+        self.hearing = text
+        if self.phase == "live" and hasattr(self, "prompt"):
+            self.prompt.setStringValue_(text)
+        if self.status == "idle":
+            self._paint_answer()
+
+    def _heard_final(self, text: str):
+        cleaned = text.strip()
+        self.hearing = ""
+        if len(cleaned) < 8:
+            return
+        if cleaned.lower() in {"okay", "ok", "yeah", "yes", "no", "right", "uh huh", "mm hmm", "thanks"}:
+            return
+        self.transcript.append(f"them: {cleaned}")
+        if hasattr(self, "prompt"):
+            self.prompt.setStringValue_(cleaned)
+        self._run("answer", cleaned, "")
+
+    def _heard_error(self, msg: str):
+        self._stop_mic()
+        self.status = "error"
+        self.error = msg
+        if self.phase == "live":
+            self.show_live()
 
     def save_settings(self):
         engine.save_config(
@@ -606,6 +683,7 @@ class HUD:
         threading.Thread(target=work, daemon=True).start()
 
     def end_room(self):
+        self._stop_mic()
         if self.phase == "setup":
             self.hide_overlay()
             return

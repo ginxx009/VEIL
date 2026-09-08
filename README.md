@@ -25,6 +25,9 @@ A VEIL extra appears in the menu bar. The HUD floats over the call.
    Keys starting with `AIza` use Gemini; `xai-` uses xAI.
 2. Launch a room.
 3. Share **Meet / Zoom / your editor** — never the overlay window.
+4. Click **Mic**. Allow Microphone and Speech Recognition when macOS asks. VEIL transcribes the interviewer and writes an answer when they finish the question.
+
+Headphones help so it does not hear you speaking the answer.
 
 ### Hotkeys
 
@@ -34,6 +37,7 @@ A VEIL extra appears in the menu bar. The HUD floats over the call.
 | ⌘⇧E | Toggle stealth |
 | ⌘⇧H | Hide overlay |
 | ⌘⇧S | Solve screen |
+| ⌘⇧M | Toggle mic (auto-answer) |
 
 Stealth on = the window is not composited into their screen share. Stealth off = visible (for rehearsal).
 
