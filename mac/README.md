@@ -83,13 +83,27 @@ Keys, profile, and sessions: `~/Library/Application Support/VEIL/`.
 
 ## Installer (DMG)
 
-On a Mac:
+On a Mac, this builds a **self-contained** `VEIL.app` (Python is inside — users do not install Python or pip):
 
 ```bash
 bash mac/build_dmg.sh
 ```
 
-Writes `dist/VEIL.dmg`. Or run **Actions → Release installers** on GitHub and download the Mac artifact.
+Writes `dist/VEIL.dmg`. Users open it, drag **VEIL** onto **Applications**, and launch it.
+
+**Permissions:** macOS will never grant Mic / Speech without the user clicking Allow. The shipped app asks on **first launch** (not at install, Apple does not allow that). Usage strings and entitlements are baked into the app.
+
+**To sell / post a public download** you must sign + notarize with an Apple Developer account ($99/year):
+
+```bash
+export VEIL_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+export APPLE_ID="you@example.com"
+export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+export APPLE_TEAM_ID="TEAMID"
+bash mac/build_dmg.sh
+```
+
+Without that, Gatekeeper will warn “VEIL can’t be opened because it is from an unidentified developer.” Ad-hoc sign still works on *your* Mac.
 
 ## Files
 

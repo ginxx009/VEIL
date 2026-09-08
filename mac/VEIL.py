@@ -248,6 +248,10 @@ class HUD:
         self.panel.orderFrontRegardless()
         NSApp.activateIgnoringOtherApps_(True)
         self.apply_stealth()
+        try:
+            listen.prime_permissions()
+        except Exception as e:
+            print(f"VEIL: permission prime failed: {e}", flush=True)
         print("VEIL window is open (top-right). Menu bar extra reads VEIL.", flush=True)
 
     def _build_panel(self):

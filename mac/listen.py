@@ -21,6 +21,32 @@ else:
 UTTERANCE_PAUSE = 1.15
 
 
+def _host():
+    import sys
+
+    return "VEIL" if getattr(sys, "frozen", False) else "Terminal / VEIL"
+
+
+def prime_permissions():
+    """Pop the macOS Mic + Speech dialogs on first launch (required for a shipped .app)."""
+    if _IMPORT_ERROR is not None:
+        print(f"VEIL: cannot prime permissions ({_IMPORT_ERROR})", flush=True)
+        return
+    print("VEIL: requesting Speech + Microphone permission…", flush=True)
+
+    def after_speech(status):
+        print(f"VEIL: speech auth status={status!r}", flush=True)
+        media = AVMediaTypeAudio if AVMediaTypeAudio else "soun"
+        AVCaptureDevice.requestAccessForMediaType_completionHandler_(
+            media, lambda ok: print(f"VEIL: mic auth ok={ok!r}", flush=True)
+        )
+
+    try:
+        SFSpeechRecognizer.requestAuthorization_(after_speech)
+    except Exception as e:
+        print(f"VEIL: permission request failed: {e}", flush=True)
+
+
 def _main(fn):
     AppHelper.callAfter(fn)
 
@@ -60,7 +86,7 @@ class Listener:
             if not self._auth_done:
                 _main(
                     lambda: self.on_error(
-                        "macOS did not grant Speech Recognition. System Settings → Privacy & Security → Speech Recognition — enable Terminal or VEIL."
+                        "macOS did not grant Speech Recognition. System Settings → Privacy & Security → Speech Recognition — enable VEIL."
                     )
                 )
                 return
@@ -84,7 +110,7 @@ class Listener:
             if code != 3:
                 _main(
                     lambda: self.on_error(
-                        "Allow Speech Recognition for Terminal / VEIL in System Settings → Privacy & Security."
+                        "Allow Speech Recognition for VEIL in System Settings → Privacy & Security."
                     )
                 )
                 return
@@ -94,7 +120,7 @@ class Listener:
                 if not ok:
                     _main(
                         lambda: self.on_error(
-                            "Allow Microphone for Terminal / VEIL in System Settings → Privacy & Security."
+                            "Allow Microphone for VEIL in System Settings → Privacy & Security."
                         )
                     )
                     return
