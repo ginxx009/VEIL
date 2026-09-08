@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 """VEIL — macOS overlay copilot.
 
-A borderless, non-activating panel excluded from screen capture
-(NSWindowSharingNone + content protection). Lives in the menu bar.
+A titled HUD window excluded from screen capture
+(NSWindowSharingNone + content protection). Menu bar extra + floating window.
 Does not join Zoom, Meet, or Teams.
-
-Run on a Mac:
-    pip3 install -r requirements.txt
-    python3 VEIL.py
 """
 
 from __future__ import annotations
@@ -24,19 +20,18 @@ import time
 from AppKit import (
     NSApp,
     NSApplication,
-    NSApplicationActivationPolicyAccessory,
+    NSApplicationActivationPolicyRegular,
     NSAppearance,
     NSBackingStoreBuffered,
-    NSBezierPath,
     NSButton,
     NSColor,
     NSEvent,
+    NSFloatingWindowLevel,
     NSFont,
     NSImage,
     NSMakeRect,
     NSMenu,
     NSMenuItem,
-    NSPanel,
     NSScreen,
     NSScrollView,
     NSStatusBar,
@@ -48,14 +43,14 @@ from AppKit import (
     NSVisualEffectMaterialHUDWindow,
     NSVisualEffectStateActive,
     NSVisualEffectView,
+    NSWindow,
     NSWindowCollectionBehaviorCanJoinAllSpaces,
     NSWindowCollectionBehaviorFullScreenAuxiliary,
-    NSWindowCollectionBehaviorIgnoresCycle,
     NSWindowCollectionBehaviorStationary,
     NSWindowSharingNone,
     NSWindowSharingReadOnly,
-    NSWindowStyleMaskBorderless,
-    NSWindowStyleMaskNonactivatingPanel,
+    NSWindowStyleMaskClosable,
+    NSWindowStyleMaskTitled,
 )
 from Foundation import NSObject
 from PyObjCTools import AppHelper
@@ -120,10 +115,8 @@ def pill(title, frame, target, action, kind="ghost"):
     b.layer().setCornerRadius_(14)
     if kind == "sage":
         b.layer().setBackgroundColor_(rgba(0.561, 0.686, 0.612, 0.18).CGColor())
-        b.setContentTintColor_(COL_SAGE)
     elif kind == "danger":
         b.layer().setBackgroundColor_(rgba(0.816, 0.439, 0.439, 0.16).CGColor())
-        b.setContentTintColor_(COL_RED)
     else:
         b.layer().setBackgroundColor_(COL_CARD.CGColor())
     color = COL_SAGE if kind == "sage" else COL_RED if kind == "danger" else COL_TEXT
@@ -135,32 +128,27 @@ def pill(title, frame, target, action, kind="ghost"):
 
     b.setAttributedTitle_(NSAttributedString.alloc().initWithString_attributes_(title, attr))
     b.setTarget_(target)
-    b.setAction_(action)
+    b.setAction_(action.decode() if isinstance(action, bytes) else action)
     return b
 
 
 def veil_status_image():
-    img = NSImage.alloc().initWithSize_((18, 18))
-    img.lockFocus()
-    COL_TEXT.setStroke()
-    p = NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(NSMakeRect(1.5, 3.5, 10, 10), 2.2, 2.2)
-    p.setLineWidth_(1.4)
-    p.stroke()
-    q = NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(NSMakeRect(6.5, 3.5, 10, 10), 2.2, 2.2)
-    q.setLineWidth_(1.4)
-    q.setLineDash_count_phase_([2.2, 1.8], 2, 0)
-    q.stroke()
-    img.unlockFocus()
-    img.setTemplate_(True)
-    return img
+    try:
+        img = NSImage.imageWithSystemSymbolName_accessibilityDescription_("eye.slash", "VEIL")
+        if img is not None:
+            img.setTemplate_(True)
+            return img
+    except Exception:
+        pass
+    return None
 
 
-class OverlayPanel(NSPanel):
+class OverlayPanel(NSWindow):
     def canBecomeKeyWindow(self):
         return True
 
     def canBecomeMainWindow(self):
-        return False
+        return True
 
 
 class VeilApp(NSObject):
@@ -177,45 +165,43 @@ class VeilApp(NSObject):
         self._build_status_item()
         self._bind_keys()
         self.show_setup()
-        self.apply_stealth()
+        self.panel.makeKeyAndOrderFront_(None)
         self.panel.orderFrontRegardless()
+        NSApp.activateIgnoringOtherApps_(True)
+        self.apply_stealth()
+        print("VEIL window is open (top-right). Menu bar extra reads VEIL.", flush=True)
 
     def _build_panel(self):
         screen = NSScreen.mainScreen().visibleFrame()
         x = screen.origin.x + screen.size.width - W - 24
         y = screen.origin.y + screen.size.height - H - 24
-        style = NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel
+        style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
         panel = OverlayPanel.alloc().initWithContentRect_styleMask_backing_defer_(
             NSMakeRect(x, y, W, H),
             style,
             NSBackingStoreBuffered,
             False,
         )
-        panel.setLevel_(101)  # NSPopUpMenuWindowLevel — above most app windows
+        panel.setLevel_(NSFloatingWindowLevel)
         panel.setOpaque_(False)
         panel.setBackgroundColor_(NSColor.clearColor())
         panel.setHasShadow_(True)
         panel.setMovableByWindowBackground_(True)
         panel.setHidesOnDeactivate_(False)
-        panel.setFloatingPanel_(True)
-        panel.setBecomesKeyOnlyIfNeeded_(True)
+        panel.setTitle_("VEIL")
+        panel.setReleasedWhenClosed_(False)
         panel.setCollectionBehavior_(
             NSWindowCollectionBehaviorCanJoinAllSpaces
             | NSWindowCollectionBehaviorStationary
-            | NSWindowCollectionBehaviorIgnoresCycle
             | NSWindowCollectionBehaviorFullScreenAuxiliary
         )
         panel.setAppearance_(NSAppearance.appearanceNamed_("NSAppearanceNameDarkAqua"))
-        panel.setTitle_(" ")
-        panel.setReleasedWhenClosed_(False)
 
         fx = NSVisualEffectView.alloc().initWithFrame_(NSMakeRect(0, 0, W, H))
         fx.setMaterial_(NSVisualEffectMaterialHUDWindow)
         fx.setBlendingMode_(NSVisualEffectBlendingModeBehindWindow)
         fx.setState_(NSVisualEffectStateActive)
         fx.setWantsLayer_(True)
-        fx.layer().setCornerRadius_(16)
-        fx.layer().setMasksToBounds_(True)
         panel.setContentView_(fx)
 
         self.panel = panel
@@ -471,20 +457,23 @@ class VeilApp(NSObject):
     def _build_status_item(self):
         bar = NSStatusBar.systemStatusBar()
         item = bar.statusItemWithLength_(NSVariableStatusItemLength)
-        item.setImage_(veil_status_image())
+        item.setTitle_("VEIL")
+        img = veil_status_image()
+        if img is not None:
+            item.setImage_(img)
         item.setHighlightMode_(True)
-        item.setToolTip_("VEIL")
+        item.setToolTip_("VEIL overlay")
         menu = NSMenu.alloc().init()
         menu.setAutoenablesItems_(False)
         pairs = [
-            ("Show overlay", b"showOverlay:"),
-            ("Hide overlay", b"hideOverlay:"),
+            ("Show overlay", "showOverlay:"),
+            ("Hide overlay", "hideOverlay:"),
             (None, None),
-            ("Toggle stealth", b"toggleStealth:"),
-            ("Next question", b"nextQuestion:"),
+            ("Toggle stealth", "toggleStealth:"),
+            ("Next question", "nextQuestion:"),
             (None, None),
-            ("Settings", b"showSettings:"),
-            ("Quit VEIL", b"quit:"),
+            ("Settings", "showSettings:"),
+            ("Quit VEIL", "quit:"),
         ]
         for title, action in pairs:
             if title is None:
@@ -497,20 +486,15 @@ class VeilApp(NSObject):
         self.status_item = item
 
     def _bind_keys(self):
+        # Local only — a global monitor prompts Accessibility and can hang
+        # a script with no app bundle.
         mask = 1 << 10  # NSEventMaskKeyDown
 
         def local_handler(event):
             self._handle_key(event)
             return event
 
-        def global_handler(event):
-            self._handle_key(event)
-
         NSEvent.addLocalMonitorForEventsMatchingMask_handler_(mask, local_handler)
-        try:
-            NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(mask, global_handler)
-        except Exception:
-            pass
 
     def _handle_key(self, event):
         flags = int(event.modifierFlags())
@@ -666,13 +650,25 @@ class VeilApp(NSObject):
 
 
 def main():
-    app = NSApplication.sharedApplication()
-    app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
-    app.setAppearance_(NSAppearance.appearanceNamed_("NSAppearanceNameDarkAqua"))
-    delegate = VeilApp.alloc().init()
-    app.setDelegate_(delegate)
-    delegate.start()
-    AppHelper.runEventLoop()
+    import signal
+    import traceback
+
+    print("Starting VEIL…", flush=True)
+    try:
+        app = NSApplication.sharedApplication()
+        app.setActivationPolicy_(NSApplicationActivationPolicyRegular)
+        app.setAppearance_(NSAppearance.appearanceNamed_("NSAppearanceNameDarkAqua"))
+        delegate = VeilApp.alloc().init()
+        app.setDelegate_(delegate)
+        delegate.start()
+        print("This terminal stays busy while VEIL runs. Ctrl+C quits.", flush=True)
+        signal.signal(signal.SIGINT, lambda *_: NSApp.terminate_(None))
+        AppHelper.runEventLoop()
+    except KeyboardInterrupt:
+        print("\nQuitting VEIL.", flush=True)
+    except Exception:
+        traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
