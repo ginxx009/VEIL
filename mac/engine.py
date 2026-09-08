@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import urllib.error
@@ -71,6 +72,48 @@ SCREEN_FALLBACK = (
     "function twoSum(nums: number[], target: number): number[]\n"
     "nums = [2, 7, 11, 15], target = 9  →  [0, 1]"
 )
+
+
+def capture_screen() -> str | None:
+    """JPEG of the main display as base64. VEIL is capture-excluded."""
+    try:
+        import Quartz
+        from AppKit import NSBitmapImageRep
+
+        img = Quartz.CGWindowListCreateImage(
+            Quartz.CGRectInfinite,
+            Quartz.kCGWindowListOptionOnScreenOnly,
+            Quartz.kCGNullWindowID,
+            Quartz.kCGWindowImageBoundsIgnoreFraming,
+        )
+        if img is None:
+            return None
+        rep = NSBitmapImageRep.alloc().initWithCGImage_(img)
+        data = rep.representationUsingType_properties_(3, {"NSImageCompressionFactor": 0.4})
+        if data is None:
+            return None
+        return base64.b64encode(bytes(data)).decode("ascii")
+    except Exception as e:
+        print(f"VEIL capture: {e}", flush=True)
+        return None
+
+
+def load_resume_file(path: str) -> str:
+    p = Path(path)
+    suffix = p.suffix.lower()
+    if suffix == ".pdf":
+        try:
+            from Foundation import NSURL
+            from PDFKit import PDFDocument
+
+            doc = PDFDocument.alloc().initWithURL_(NSURL.fileURLWithPath_(str(p)))
+            text = str(doc.string() or "").strip()
+            if text:
+                return text[:24000]
+        except Exception as e:
+            print(f"VEIL pdf: {e}", flush=True)
+        raise RuntimeError("Could not read that PDF. Paste the text into Resume instead.")
+    return p.read_text(encoding="utf-8", errors="replace")[:24000]
 
 
 def _read_json(path: Path, fallback):
@@ -208,13 +251,13 @@ Hard rules:
 - Do not use: furthermore, additionally, leverage, utilize, delve, robust, seamless, passionate, excited to, in conclusion, first/second/third.
 - Do not number points. Do not use markdown, bullets, labels, or JSON.
 - It's okay to be slightly imperfect — a real person hedges ("we ended up…", "what actually bit us was…").
-- If you don't know, say a honest next step ("I'd want to see the traffic shape before locking the store").
-Coding: say the approach in one breath, then a tiny snippet, no tutorial voice."""
+- If they need to draw (draw.io, whiteboard, system design): talk through the NEXT boxes to put on the canvas, in order, as speech. "I'd drop the client here, API gateway in the middle, then the two services…" Name the arrow. One tradeoff. Do not dump a whole architecture essay.
+- If you can see the screen, only say what to add or fix next — don't restate the whole diagram.
     user = f"""They're asking:
 {_clip(question, 500) or "(latest in transcript)"}
 
 Who they are (resume — this is the only source of facts):
-{_clip(profile.get("resume", ""), 1800) or "(none)"}
+{_clip(profile.get("resume", ""), 3500) or "(none — answers will sound generic. They should import a resume.)"}
 
 Role / job they're interviewing for:
 {_clip(profile.get("jobDescription", ""), 700) or "(none)"}
@@ -223,7 +266,8 @@ Recent conversation:
 {_clip(transcript, 1200) or "(none)"}
 
 Screen:
-{_clip(screen_text, 800) if kind == "screen" else "(n/a)"}
+{_clip(screen_text, 800) if kind in ("screen", "draw") else "(n/a)"}
+{"A screenshot of their display is attached. If it's draw.io / a whiteboard, coach the next boxes only." if kind in ("screen", "draw") else ""}
 
 Reply with only the words {name} should say next."""
     return system, user
@@ -260,7 +304,16 @@ def _http_err(e: urllib.error.HTTPError) -> str:
     return f"HTTP {e.code}: {msg}"
 
 
-def _openai_stream(url: str, api_key: str, model: str, system: str, user: str, max_tokens: int):
+def _openai_stream(url: str, api_key: str, model: str, system: str, user: str, max_tokens: int, image_b64=None):
+    content = user
+    if image_b64:
+        content = [
+            {"type": "text", "text": user},
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{image_b64}", "detail": "low"},
+            },
+        ]
     res = _open(
         url,
         {
@@ -270,7 +323,7 @@ def _openai_stream(url: str, api_key: str, model: str, system: str, user: str, m
             "stream": True,
             "messages": [
                 {"role": "system", "content": system},
-                {"role": "user", "content": user},
+                {"role": "user", "content": content},
             ],
         },
         {"Authorization": f"Bearer {api_key}"},
@@ -350,7 +403,7 @@ def _gemini_stream(api_key: str, system: str, user: str, max_tokens: int):
     raise RuntimeError(hint)
 
 
-def _oai_stream(api_key: str, system: str, user: str, max_tokens: int):
+def _oai_stream(api_key: str, system: str, user: str, max_tokens: int, image_b64=None):
     last = None
     for model in ("gpt-4o-mini", "gpt-4.1-mini", "gpt-4o"):
         try:
@@ -361,6 +414,7 @@ def _oai_stream(api_key: str, system: str, user: str, max_tokens: int):
                 system,
                 user,
                 max_tokens,
+                image_b64=image_b64,
             )
             return
         except urllib.error.HTTPError as e:
@@ -369,10 +423,10 @@ def _oai_stream(api_key: str, system: str, user: str, max_tokens: int):
     raise RuntimeError(last or "OpenAI request failed")
 
 
-def _stream(api_key: str, system: str, user: str, max_tokens: int):
+def _stream(api_key: str, system: str, user: str, max_tokens: int, image_b64=None):
     kind = _provider(api_key)
     if kind == "openai":
-        yield from _oai_stream(api_key, system, user, max_tokens)
+        yield from _oai_stream(api_key, system, user, max_tokens, image_b64=image_b64)
     elif kind == "gemini":
         yield from _gemini_stream(api_key, system, user, max_tokens)
     else:
@@ -409,8 +463,36 @@ def stream_assist(profile: dict, transcript: str, question: str, kind: str, scre
     key = cfg.get("api_key") or ""
     if not key:
         raise RuntimeError("Add an OpenAI API key in VEIL → Settings.")
+    q = (question or "").lower()
+    draw = any(
+        h in q
+        for h in (
+            "draw.io",
+            "drawio",
+            "whiteboard",
+            "diagram",
+            "system design",
+            "excalidraw",
+            "lucid",
+            "sketch",
+            "draw the",
+            "draw a",
+            "on the board",
+        )
+    )
+    if draw and kind != "screen":
+        kind = "draw"
+    image = None
+    if kind in ("screen", "draw"):
+        image = capture_screen()
     system, user = _assist_prompts(profile, transcript, question, kind, screen_text)
-    yield from _stream(key, system, user, 360 if kind == "screen" else 240)
+    yield from _stream(
+        key,
+        system,
+        user,
+        420 if kind in ("screen", "draw") else 240,
+        image_b64=image,
+    )
 
 
 def assist(profile: dict, transcript: str, question: str, kind: str, screen_text: str) -> dict:

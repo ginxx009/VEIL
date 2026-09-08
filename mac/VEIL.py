@@ -34,6 +34,7 @@ from AppKit import (
     NSMakeRect,
     NSMenu,
     NSMenuItem,
+    NSOpenPanel,
     NSScreen,
     NSScrollView,
     NSStatusBar,
@@ -213,6 +214,9 @@ class Actions(NSObject):
     def toggleMic_(self, sender):
         self.hud.toggle_mic()
 
+    def importResume_(self, sender):
+        self.hud.import_resume()
+
 
 class HUD:
     def __init__(self, actions: Actions):
@@ -330,7 +334,8 @@ class HUD:
             x += 126
 
         y -= 78
-        self.body.addSubview_(label("Resume / playbook", NSMakeRect(20, y, 380, 16), 11, muted=True))
+        self.body.addSubview_(label("Resume / playbook", NSMakeRect(20, y, 240, 16), 11, muted=True))
+        self.body.addSubview_(pill("Import file", NSMakeRect(268, y - 4, 112, 24), a, "importResume:", "ghost"))
         self.resume_field = multiline(NSMakeRect(20, 168, 380, y - 20 - 168), self.profile.get("resume", ""))
         self.body.addSubview_(self.resume_field["scroll"])
         self.body.addSubview_(label("Job or meeting context", NSMakeRect(20, 148, 380, 16), 11, muted=True))
@@ -706,10 +711,34 @@ class HUD:
             return
         self._run("answer", str(self.prompt.stringValue()), "")
 
+    def import_resume(self):
+        panel = NSOpenPanel.openPanel()
+        panel.setAllowsMultipleSelection_(False)
+        panel.setCanChooseDirectories_(False)
+        panel.setCanChooseFiles_(True)
+        panel.setAllowedFileTypes_(["pdf", "txt", "md", "rtf", "text"])
+        panel.setTitle_("Import resume")
+        if panel.runModal() != 1:
+            return
+        url = panel.URL()
+        if url is None:
+            return
+        path = str(url.path())
+        try:
+            text = engine.load_resume_file(path)
+        except Exception as e:
+            print(f"VEIL resume: {e}", flush=True)
+            return
+        self.profile["resume"] = text
+        engine.save_profile(self.profile)
+        if self.phase == "setup":
+            self.show_setup()
+
     def screen(self):
         if self.phase != "live":
             return
-        self._run("screen", str(self.prompt.stringValue()), engine.SCREEN_FALLBACK)
+        q = str(self.prompt.stringValue()) or "Look at my screen. If I'm on draw.io or a whiteboard, tell me what to draw next."
+        self._run("screen", q, "")
 
     def next_question(self):
         if self.phase != "live":
