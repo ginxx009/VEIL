@@ -660,25 +660,33 @@ class HUD:
             return
         self.status = "thinking"
         self.error = None
+        self.result = {"spoken": "", "points": [], "code": ""}
         self._paint_answer()
         packed = "\n".join(self.transcript)
         profile = dict(self.profile)
 
         def work():
-            res = engine.assist(profile, packed, question, kind, screen_text)
+            acc = []
+            try:
+                for chunk in engine.stream_assist(profile, packed, question, kind, screen_text):
+                    acc.append(chunk)
+                    text = "".join(acc)
 
-            def done():
-                if res.get("ok"):
-                    self.status = "ready"
-                    self.result = res.get("result") or {}
-                    self.error = None
-                    self.prompt.setStringValue_("")
-                else:
+                    def paint(t=text):
+                        self.status = "ready"
+                        self.result = {"spoken": t, "points": [], "code": ""}
+                        self._paint_answer()
+
+                    AppHelper.callAfter(paint)
+            except Exception as e:
+                msg = str(e)
+
+                def fail(m=msg):
                     self.status = "error"
-                    self.error = res.get("error") or "Could not generate an answer."
-                self._paint_answer()
+                    self.error = m
+                    self._paint_answer()
 
-            AppHelper.callAfter(done)
+                AppHelper.callAfter(fail)
 
         threading.Thread(target=work, daemon=True).start()
 

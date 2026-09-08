@@ -128,8 +128,33 @@ def _post_json(url: str, payload: dict, headers: dict | None = None) -> dict:
         headers={"Content-Type": "application/json", **(headers or {})},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=60) as res:
+    with urllib.request.urlopen(req, timeout=20) as res:
         return json.loads(res.read().decode("utf-8"))
+
+
+def _open(url: str, payload: dict, headers: dict | None = None):
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json", **(headers or {})},
+        method="POST",
+    )
+    return urllib.request.urlopen(req, timeout=20)
+
+
+def _sse_payloads(response):
+    for raw in response:
+        line = raw.decode("utf-8", "replace").strip()
+        if not line.startswith("data:"):
+            continue
+        data = line[5:].strip()
+        if not data or data == "[DONE]":
+            continue
+        try:
+            yield json.loads(data)
+        except json.JSONDecodeError:
+            continue
 
 
 def _clip(value: str, n: int) -> str:
@@ -161,123 +186,143 @@ def _provider(api_key: str) -> str:
     return "xai"
 
 
-def _xai_chat(api_key: str, system: str, user: str, max_tokens: int) -> dict:
-    data = _post_json(
-        "https://api.x.ai/v1/chat/completions",
-        {
-            "model": "grok-4.5",
-            "temperature": 0.55,
-            "max_tokens": max_tokens,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        },
-        {"Authorization": f"Bearer {api_key}"},
-    )
-    return {"ok": True, "text": data.get("choices", [{}])[0].get("message", {}).get("content", "")}
-
-
-def _gemini_chat(api_key: str, system: str, user: str, max_tokens: int) -> dict:
+def _xai_stream(api_key: str, system: str, user: str, max_tokens: int):
     last = None
-    for model in ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"):
+    for model in ("grok-4-fast", "grok-4.5"):
+        try:
+            res = _open(
+                "https://api.x.ai/v1/chat/completions",
+                {
+                    "model": model,
+                    "temperature": 0.4,
+                    "max_tokens": max_tokens,
+                    "stream": True,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                },
+                {"Authorization": f"Bearer {api_key}"},
+            )
+        except urllib.error.HTTPError as e:
+            last = e
+            continue
+        with res:
+            for payload in _sse_payloads(res):
+                delta = (payload.get("choices") or [{}])[0].get("delta") or {}
+                piece = delta.get("content") or ""
+                if piece:
+                    yield piece
+        return
+    if last:
+        raise last
+
+
+def _gemini_stream(api_key: str, system: str, user: str, max_tokens: int):
+    last = None
+    for model in ("gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"):
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{model}:generateContent?key={api_key}"
+            f"{model}:streamGenerateContent?alt=sse&key={api_key}"
         )
         try:
-            data = _post_json(
+            res = _open(
                 url,
                 {
                     "systemInstruction": {"parts": [{"text": system}]},
                     "contents": [{"role": "user", "parts": [{"text": user}]}],
-                    "generationConfig": {"temperature": 0.55, "maxOutputTokens": max_tokens},
+                    "generationConfig": {"temperature": 0.4, "maxOutputTokens": max_tokens},
                 },
             )
         except urllib.error.HTTPError as e:
             last = e
             continue
-        parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-        text = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
-        if text.strip():
-            return {"ok": True, "text": text}
-        last = RuntimeError(data.get("error", {}).get("message") or "Empty Gemini response")
+        with res:
+            for payload in _sse_payloads(res):
+                parts = payload.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                for part in parts:
+                    piece = part.get("text") or ""
+                    if piece:
+                        yield piece
+        return
     if last:
         raise last
-    return {"ok": True, "text": ""}
+
+
+def _stream(api_key: str, system: str, user: str, max_tokens: int):
+    if _provider(api_key) == "gemini":
+        yield from _gemini_stream(api_key, system, user, max_tokens)
+    else:
+        yield from _xai_stream(api_key, system, user, max_tokens)
 
 
 def _chat(api_key: str, system: str, user: str, max_tokens: int) -> dict:
-    if _provider(api_key) == "gemini":
-        return _gemini_chat(api_key, system, user, max_tokens)
-    return _xai_chat(api_key, system, user, max_tokens)
+    text = "".join(_stream(api_key, system, user, max_tokens))
+    return {"ok": True, "text": text}
+
+
+def _assist_prompts(profile, transcript, question, kind, screen_text):
+    system = f"""VEIL live earpiece. {_voice(profile.get("mode", "interview"))}
+Use the resume. Do not invent employers or metrics.
+Answer in 2–4 short spoken sentences, first person. No preamble, no markdown, no JSON.
+Coding: one-sentence approach, then a tiny snippet."""
+    user = f"""Q: {_clip(question, 500) or "(latest in transcript)"}
+RESUME:
+{_clip(profile.get("resume", ""), 1800) or "(none)"}
+ROLE:
+{_clip(profile.get("jobDescription", ""), 700) or "(none)"}
+HEARD:
+{_clip(transcript, 1200) or "(none)"}
+SCREEN:
+{_clip(screen_text, 800) if kind == "screen" else "(n/a)"}"""
+    return system, user
+
+
+def stream_assist(profile: dict, transcript: str, question: str, kind: str, screen_text: str):
+    cfg = load_config()
+    url = (cfg.get("api_url") or "").rstrip("/")
+    if url:
+        res = _post_json(
+            f"{url}/api/assist",
+            {
+                "mode": profile.get("mode", "interview"),
+                "kind": kind,
+                "resume": profile.get("resume", ""),
+                "job": profile.get("jobDescription", ""),
+                "transcript": transcript,
+                "question": question,
+                "screenText": screen_text,
+            },
+        )
+        if not res.get("ok"):
+            raise RuntimeError(res.get("error") or "Assist failed")
+        spoken = (res.get("result") or {}).get("spoken") or ""
+        if spoken:
+            yield spoken
+        return
+    key = cfg.get("api_key") or ""
+    if not key:
+        raise RuntimeError("Add an xAI or Gemini API key in VEIL → Settings.")
+    system, user = _assist_prompts(profile, transcript, question, kind, screen_text)
+    yield from _stream(key, system, user, 320 if kind == "screen" else 180)
 
 
 def assist(profile: dict, transcript: str, question: str, kind: str, screen_text: str) -> dict:
-    cfg = load_config()
-    payload = {
-        "mode": profile.get("mode", "interview"),
-        "kind": kind,
-        "resume": profile.get("resume", ""),
-        "job": profile.get("jobDescription", ""),
-        "transcript": transcript,
-        "question": question,
-        "screenText": screen_text,
-    }
-    url = (cfg.get("api_url") or "").rstrip("/")
-    if url:
-        try:
-            return _post_json(f"{url}/api/assist", payload)
-        except urllib.error.URLError as e:
-            return {"ok": False, "error": f"Could not reach VEIL API ({e.reason})"}
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-
-    key = cfg.get("api_key") or ""
-    if not key:
-        return {
-            "ok": False,
-            "error": "Add an xAI or Gemini API key in VEIL → Settings.",
-        }
-
-    system = f"""You are VEIL, a private meeting copilot. Only the user can see your output.
-{_voice(payload["mode"])}
-Ground every answer in their resume and the job/context when those are provided. Do not invent employers or metrics that are not in the resume.
-If this is a coding prompt, give a speakable approach first, then compact TypeScript.
-Return ONLY JSON with keys:
-- spoken: string (what they should say, 3–6 sentences, no markdown)
-- points: string[] (2–4 short talking points)
-- code: string (code only if relevant, else empty string)"""
-    user = f"""KIND: {"Solve or explain what is on the shared screen." if kind == "screen" else "Answer the latest question."}
-RESUME:
-{_clip(payload["resume"], 8000) or "(none)"}
-
-JOB / CONTEXT:
-{_clip(payload["job"], 4000) or "(none)"}
-
-SHARED SCREEN:
-{_clip(screen_text, 4000) or "(none)"}
-
-TRANSCRIPT (latest last):
-{_clip(transcript, 4500) or "(none)"}
-
-FOCUS QUESTION:
-{_clip(question, 1200) or "(use the latest interviewer question in the transcript)"}"""
     try:
-        out = _chat(key, system, user, 900 if kind == "screen" else 700)
+        text = "".join(stream_assist(profile, transcript, question, kind, screen_text)).strip()
     except Exception as e:
         return {"ok": False, "error": str(e)}
-    parsed = _extract_json(out["text"]) or {}
-    if not isinstance(parsed, dict) or not parsed.get("spoken"):
-        return {"ok": True, "result": {"spoken": out["text"].strip(), "points": [], "code": ""}}
-    return {
-        "ok": True,
-        "result": {
-            "spoken": str(parsed.get("spoken", "")),
-            "points": [str(p) for p in parsed.get("points", [])][:6] if isinstance(parsed.get("points"), list) else [],
-            "code": str(parsed.get("code", "") or ""),
-        },
-    }
+    parsed = _extract_json(text) or {}
+    if isinstance(parsed, dict) and parsed.get("spoken"):
+        return {
+            "ok": True,
+            "result": {
+                "spoken": str(parsed.get("spoken", "")),
+                "points": [str(p) for p in parsed.get("points", [])][:6] if isinstance(parsed.get("points"), list) else [],
+                "code": str(parsed.get("code", "") or ""),
+            },
+        }
+    return {"ok": True, "result": {"spoken": text, "points": [], "code": ""}}
 
 
 def notes(profile: dict, transcript: str) -> dict:
