@@ -383,7 +383,7 @@ class HUD:
         self.body.addSubview_(pill("Hide overlay", NSMakeRect(14, 12, 110, 28), a, "hideOverlay:", "ghost"))
         self.body.addSubview_(
             label(
-                "Listening — answers when they finish a question" if self.listening else "Share Meet / Zoom / editor — not this window",
+                "Speakers on — headphones hide their voice from the mic" if self.listening else "Share Meet / Zoom / editor — not this window",
                 NSMakeRect(136, 16, 260, 20),
                 11,
                 muted=True,
@@ -461,13 +461,15 @@ class HUD:
             self.answer_view.setString_(text)
             self.answer_view.setTextColor_(COL_TEXT)
             return
-        if self.listening and self.hearing and self.status in ("idle",):
+        if self.listening and self.hearing:
             self.answer_view.setTextColor_(COL_MUTED)
-            self.answer_view.setString_("Listening…\n" + self.hearing)
+            self.answer_view.setString_("Hearing…\n" + self.hearing)
             return
-        if self.listening and self.status == "idle" and not self.result:
+        if self.listening and self.status in ("idle", "ready") and not (self.result and self.result.get("spoken")):
             self.answer_view.setTextColor_(COL_MUTED)
-            self.answer_view.setString_("Listening. They speak — VEIL answers when the question ends.")
+            self.answer_view.setString_(
+                "Listening.\nPlay their questions on speakers (not headphones).\nI answer ~1s after they stop talking."
+            )
             return
         self.answer_view.setTextColor_(COL_MUTED)
         self.answer_view.setString_(
@@ -592,16 +594,15 @@ class HUD:
         self.hearing = text
         if self.phase == "live" and hasattr(self, "prompt"):
             self.prompt.setStringValue_(text)
-        if self.status == "idle":
+        if self.phase == "live" and self.status != "thinking":
             self._paint_answer()
 
     def _heard_final(self, text: str):
         cleaned = text.strip()
         self.hearing = ""
-        if len(cleaned) < 8:
+        if len(cleaned) < 4:
             return
-        if cleaned.lower() in {"okay", "ok", "yeah", "yes", "no", "right", "uh huh", "mm hmm", "thanks"}:
-            return
+        print(f"VEIL assist on: {cleaned}", flush=True)
         self.transcript.append(f"them: {cleaned}")
         if hasattr(self, "prompt"):
             self.prompt.setStringValue_(cleaned)

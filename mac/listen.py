@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import threading
+import time
+
 from Foundation import NSLocale
 from PyObjCTools import AppHelper
 
@@ -13,6 +16,9 @@ except ImportError as e:  # pragma: no cover
     _IMPORT_ERROR = e
 else:
     _IMPORT_ERROR = None
+
+# Pause after the last partial before we treat it as a finished question.
+UTTERANCE_PAUSE = 1.15
 
 
 def _main(fn):
@@ -30,7 +36,13 @@ class Listener:
         self._task = None
         self._recognizer = None
         self._tap = None
+        self._handler = None
         self._last_final = ""
+        self._partial = ""
+        self._timer = None
+        self._lock = threading.Lock()
+        self._got_audio = False
+        self._auth_done = False
 
     def start(self):
         if _IMPORT_ERROR is not None:
@@ -40,21 +52,47 @@ class Listener:
             return
         if self.running:
             return
+        print("VEIL: requesting Speech + Microphone permission…", flush=True)
 
-        def after_speech(status):
-            if int(status) != 3:  # authorized
+        def watchdog():
+            time.sleep(7)
+            if not self._auth_done:
                 _main(
                     lambda: self.on_error(
-                        "Allow Speech Recognition for Terminal / Python in System Settings → Privacy & Security."
+                        "macOS did not grant Speech Recognition. System Settings → Privacy & Security → Speech Recognition — enable Terminal or VEIL."
+                    )
+                )
+                return
+            if self.running and not self._got_audio:
+                _main(
+                    lambda: self.on_error(
+                        "Mic is on but I hear nothing. Play Gemini Live / Zoom on speakers (not headphones) so the Mac mic can hear them."
+                    )
+                )
+
+        threading.Thread(target=watchdog, daemon=True).start()
+
+        def after_speech(status):
+            self._auth_done = True
+            print(f"VEIL: speech auth status={status!r}", flush=True)
+            try:
+                code = int(status)
+            except Exception:
+                code = 3 if status else 0
+            if code != 3:
+                _main(
+                    lambda: self.on_error(
+                        "Allow Speech Recognition for Terminal / VEIL in System Settings → Privacy & Security."
                     )
                 )
                 return
 
             def after_mic(ok):
+                print(f"VEIL: mic auth ok={ok!r}", flush=True)
                 if not ok:
                     _main(
                         lambda: self.on_error(
-                            "Allow Microphone for Terminal / Python in System Settings → Privacy & Security."
+                            "Allow Microphone for Terminal / VEIL in System Settings → Privacy & Security."
                         )
                     )
                     return
@@ -67,6 +105,10 @@ class Listener:
 
     def stop(self):
         self.running = False
+        with self._lock:
+            if self._timer is not None:
+                self._timer.cancel()
+                self._timer = None
         try:
             if self._task is not None:
                 self._task.cancel()
@@ -97,7 +139,10 @@ class Listener:
         self._engine = engine
         node = engine.inputNode()
         engine.prepare()
-        fmt = node.outputFormatForBus_(0)
+        fmt = node.inputFormatForBus_(0)
+        if fmt is None or getattr(fmt, "sampleRate", lambda: 0)() == 0:
+            fmt = node.outputFormatForBus_(0)
+        print(f"VEIL: mic format={fmt}", flush=True)
 
         def tap(buffer, when):
             req = self._request
@@ -109,49 +154,83 @@ class Listener:
             node.removeTapOnBus_(0)
         except Exception:
             pass
-        node.installTapOnBus_bufferSize_format_block_(0, 1024, fmt, tap)
+        node.installTapOnBus_bufferSize_format_block_(0, 2048, fmt, tap)
         started = engine.startAndReturnError_(None)
         if started is False:
             self.on_error("Could not start the microphone.")
             self.stop()
             return
         self.running = True
+        print("VEIL: listening. Speak a question, or play it on speakers.", flush=True)
         self._start_task()
 
     def _start_task(self):
         if not self.running or self._recognizer is None:
             return
+        if self._task is not None:
+            try:
+                self._task.cancel()
+            except Exception:
+                pass
         request = SFSpeechAudioBufferRecognitionRequest.alloc().init()
         request.setShouldReportPartialResults_(True)
         try:
-            if self._recognizer.supportsOnDeviceRecognition():
-                request.setRequiresOnDeviceRecognition_(True)
+            request.setTaskHint_(1)  # dictation
         except Exception:
             pass
+        # On-device often returns nothing. Use Apple's servers.
         self._request = request
 
         def handler(result, error):
             if not self.running:
                 return
             if error is not None:
-                # Apple caps a request around a minute — just roll a new one.
-                _main(self._start_task)
+                print(f"VEIL: speech error {error}", flush=True)
                 return
             if result is None:
                 return
             text = str(result.bestTranscription().formattedString() or "").strip()
             if not text:
                 return
+            self._got_audio = True
+            print(f"VEIL heard: {text}", flush=True)
             if result.isFinal():
-                _main(lambda t=text: self._emit_final(t))
-                _main(self._start_task)
+                self._arm_flush(text, immediate=True)
             else:
-                _main(lambda t=text: self.on_partial(t))
+                self._arm_flush(text, immediate=False)
 
+        self._handler = handler
         self._task = self._recognizer.recognitionTaskWithRequest_resultHandler_(request, handler)
+
+    def _arm_flush(self, text: str, immediate: bool):
+        with self._lock:
+            self._partial = text
+            if self._timer is not None:
+                self._timer.cancel()
+            if immediate:
+                self._timer = None
+            else:
+                self._timer = threading.Timer(UTTERANCE_PAUSE, self._flush)
+                self._timer.daemon = True
+                self._timer.start()
+        _main(lambda t=text: self.on_partial(t))
+        if immediate:
+            self._flush()
+
+    def _flush(self):
+        with self._lock:
+            text = (self._partial or "").strip()
+            self._partial = ""
+            if self._timer is not None:
+                self._timer.cancel()
+                self._timer = None
+        if not text:
+            return
+        _main(lambda t=text: self._emit_final(t))
 
     def _emit_final(self, text: str):
         if text == self._last_final:
             return
         self._last_final = text
+        print(f"VEIL question: {text}", flush=True)
         self.on_final(text)
