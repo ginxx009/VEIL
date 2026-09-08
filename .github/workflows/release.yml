@@ -1,0 +1,40 @@
+name: Release installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build DMG
+        run: bash mac/build_dmg.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VEIL-mac
+          path: dist/VEIL.dmg
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build EXE
+        run: windows\build.bat
+        shell: cmd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VEIL-windows
+          path: dist/VEIL.exe

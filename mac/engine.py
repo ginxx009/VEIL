@@ -5,11 +5,17 @@ from __future__ import annotations
 import base64
 import json
 import os
+import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
 
-SUPPORT = Path.home() / "Library" / "Application Support" / "VEIL"
+if sys.platform == "darwin":
+    SUPPORT = Path.home() / "Library" / "Application Support" / "VEIL"
+elif sys.platform == "win32":
+    SUPPORT = Path(os.environ.get("APPDATA", str(Path.home()))) / "VEIL"
+else:
+    SUPPORT = Path.home() / ".local" / "share" / "VEIL"
 CONFIG = SUPPORT / "config.json"
 PROFILE = SUPPORT / "profile.json"
 SESSIONS = SUPPORT / "sessions.json"
@@ -76,6 +82,20 @@ SCREEN_FALLBACK = (
 
 def capture_screen() -> str | None:
     """JPEG of the main display as base64. VEIL is capture-excluded."""
+    if sys.platform == "win32":
+        try:
+            from io import BytesIO
+
+            from PIL import ImageGrab
+
+            img = ImageGrab.grab()
+            img.thumbnail((1280, 800))
+            buf = BytesIO()
+            img.convert("RGB").save(buf, format="JPEG", quality=55)
+            return base64.b64encode(buf.getvalue()).decode("ascii")
+        except Exception as e:
+            print(f"VEIL capture: {e}", flush=True)
+            return None
     try:
         import Quartz
         from AppKit import NSBitmapImageRep

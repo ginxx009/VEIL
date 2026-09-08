@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>VEIL</string>
+  <key>CFBundleDisplayName</key><string>VEIL</string>
+  <key>CFBundleIdentifier</key><string>ph.joesolutions.veil</string>
+  <key>CFBundleVersion</key><string>1.0.0</string>
+  <key>CFBundleShortVersionString</key><string>1.0.0</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleIconFile</key><string>veil</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>VEIL listens to the interviewer so it can write a speakable answer.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>VEIL turns spoken questions into text on your Mac.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>VEIL stays as a floating overlay above your interview.</string>
+</dict>
+</plist>

@@ -1,0 +1,4 @@
+sounddevice>=0.5
+numpy>=2.0
+pypdf>=5.0
+pillow>=10.0

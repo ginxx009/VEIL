@@ -9,9 +9,13 @@ plain Python class and buttons target a thin action object.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
+
+if getattr(sys, "frozen", False):
+    sys.path.insert(0, sys._MEIPASS)
 
 if sys.platform != "darwin":
-    sys.stderr.write("VEIL is a macOS overlay. Open it on a Mac.\n")
+    sys.stderr.write("This is the macOS overlay. On Windows run windows/VEIL.py\n")
     sys.exit(1)
 
 import signal
@@ -796,6 +800,13 @@ def main():
         app = NSApplication.sharedApplication()
         app.setActivationPolicy_(NSApplicationActivationPolicyRegular)
         app.setAppearance_(NSAppearance.appearanceNamed_("NSAppearanceNameDarkAqua"))
+        icon_path = Path(__file__).resolve().parent.parent / "icons" / "veil.png"
+        if getattr(sys, "frozen", False):
+            icon_path = Path(sys._MEIPASS) / "icons" / "veil.png"
+        if icon_path.exists():
+            img = NSImage.alloc().initWithContentsOfFile_(str(icon_path))
+            if img is not None:
+                app.setApplicationIconImage_(img)
         actions = Actions.alloc().init()
         hud = HUD(actions)
         actions.hud = hud

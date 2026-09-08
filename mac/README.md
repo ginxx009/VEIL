@@ -81,6 +81,16 @@ If it never hears them: System Settings → Privacy & Security → enable both f
 
 Keys, profile, and sessions: `~/Library/Application Support/VEIL/`.
 
+## Installer (DMG)
+
+On a Mac:
+
+```bash
+bash mac/build_dmg.sh
+```
+
+Writes `dist/VEIL.dmg`. Or run **Actions → Release installers** on GitHub and download the Mac artifact.
+
 ## Files
 
 | File | Role |
