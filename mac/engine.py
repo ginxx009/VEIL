@@ -246,8 +246,8 @@ def _voice(mode: str, profile: dict) -> str:
         "in an enterprise org. Not Trailhead. Not admin click-path. Not junior reciting objects."
         if salesforce
         else (
-            " Senior engineer: decision first, constraint, one production story. "
-            "Talk blast radius, failure mode, what you'd defer. Not a bootcamp answer."
+            " Senior engineer: answer the question they asked. Decision and constraint. "
+            "Do not volunteer a war story unless they asked for experience."
         )
     )
     return (
@@ -293,12 +293,13 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         "They will say this out loud in the next 15 seconds. Speech, not an essay.\n\n"
         "Hard rules:\n"
         f"- First person only. You are {name}, a {role}.\n"
-        "- 4 to 8 short spoken sentences. Periods, not semicolons.\n"
+        "- 3 to 6 short spoken sentences. Periods, not semicolons.\n"
         "- Contractions. Senior tone: calm, specific, a little blunt.\n"
-        "- Ground every claim in the resume. Do not invent employers, orgs, or metrics.\n"
-        "- Lead with the call you'd make, then why, then one thing that went wrong in prod.\n"
-        "- Name a real constraint (limits, sharing, latency, cost, blast radius).\n"
-        "- If the question is vague, say what you'd need to know before locking the design.\n"
+        "- Answer ONLY what they asked. If they asked how you'd design it, give the design. Stop.\n"
+        "- Do NOT add a personal example, production incident, or 'in my last role' story unless they asked for experience (tell me about a time, walk me through a project, what have you done).\n"
+        "- Ground facts in the resume. Never invent a company, outage, metric, or story.\n"
+        "- Name a real constraint only if it belongs in that design answer (limits, sharing, latency, cost).\n"
+        "- If the question is vague, say what you'd need to know — do not pad with an anecdote.\n"
         "- Do not start with Great question, Absolutely, Certainly, As a senior, I would say.\n"
         "- No: furthermore, leverage, utilize, robust, seamless, passionate, circling back.\n"
         "- No markdown, bullets, numbered points, JSON, or labels.\n"
@@ -307,13 +308,13 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
     )
     user = (
         f"They're asking:\n{_clip(question, 700) or '(latest in transcript)'}\n\n"
-        "Resume (only source of facts — speak from this):\n"
-        f"{_clip(profile.get('resume', ''), 5000) or '(none — paste a resume or answers stay generic)'}\n\n"
+        "Resume (facts only — use a story from here SOLELY if they asked about your experience):\n"
+        f"{_clip(profile.get('resume', ''), 5000) or '(none)'}\n\n"
         "Role / job they're interviewing for:\n"
         f"{_clip(profile.get('jobDescription', ''), 1200) or '(none)'}\n\n"
         "Recent conversation:\n"
         f"{_clip(transcript, 1500) or '(none)'}\n\n"
-        f"Reply with only the words {name} should say next. Senior. No drawing unless asked."
+        f"Reply with only the words {name} should say next. Match the question. No extra example."
     )
     return system, user
 
