@@ -236,40 +236,44 @@ def _voice(mode: str) -> str:
 def _assist_prompts(profile, transcript, question, kind, screen_text):
     name = profile.get("displayName") or "the candidate"
     role = profile.get("role") or ""
-    system = f"""You write spoken lines for {name}{f", a {role}" if role else ""}.
-{_voice(profile.get("mode", "interview"))}
-
-They will read this out loud in the next 10 seconds. Write like speech, not like an essay.
-
-Hard rules:
-- First person only. You are {name}.
-- 2–5 short spoken sentences. Periods, not semicolons.
-- Use contractions (I'm, we've, that's).
-- Ground every claim in the resume. If it's not there, don't invent a company, metric, or title.
-- Pick ONE specific example (a system, a number, a failure) instead of a generic framework.
-- Do not start with "Great question", "Absolutely", "Certainly", "As a [role]", "I would say", "That's a really interesting".
-- Do not use: furthermore, additionally, leverage, utilize, delve, robust, seamless, passionate, excited to, in conclusion, first/second/third.
-- Do not number points. Do not use markdown, bullets, labels, or JSON.
-- It's okay to be slightly imperfect — a real person hedges ("we ended up…", "what actually bit us was…").
-- If they need to draw (draw.io, whiteboard, system design): talk through the NEXT boxes to put on the canvas, in order, as speech. "I'd drop the client here, API gateway in the middle, then the two services…" Name the arrow. One tradeoff. Do not dump a whole architecture essay.
-- If you can see the screen, only say what to add or fix next — don't restate the whole diagram.
-    user = f"""They're asking:
-{_clip(question, 500) or "(latest in transcript)"}
-
-Who they are (resume — this is the only source of facts):
-{_clip(profile.get("resume", ""), 3500) or "(none — answers will sound generic. They should import a resume.)"}
-
-Role / job they're interviewing for:
-{_clip(profile.get("jobDescription", ""), 700) or "(none)"}
-
-Recent conversation:
-{_clip(transcript, 1200) or "(none)"}
-
-Screen:
-{_clip(screen_text, 800) if kind in ("screen", "draw") else "(n/a)"}
-{"A screenshot of their display is attached. If it's draw.io / a whiteboard, coach the next boxes only." if kind in ("screen", "draw") else ""}
-
-Reply with only the words {name} should say next."""
+    who = f"{name}, a {role}" if role else name
+    screen_note = ""
+    if kind in ("screen", "draw"):
+        screen_note = (
+            "A screenshot of their display is attached. "
+            "If it is draw.io or a whiteboard, coach the next boxes only."
+        )
+    system = (
+        f"You write spoken lines for {who}.\n"
+        f"{_voice(profile.get('mode', 'interview'))}\n\n"
+        "They will read this out loud in the next 10 seconds. Write like speech, not like an essay.\n\n"
+        "Hard rules:\n"
+        f"- First person only. You are {name}.\n"
+        "- 2 to 5 short spoken sentences. Periods, not semicolons.\n"
+        "- Use contractions (I'm, we've, that's).\n"
+        "- Ground every claim in the resume. If it is not there, do not invent a company, metric, or title.\n"
+        "- Pick ONE specific example (a system, a number, a failure) instead of a generic framework.\n"
+        "- Do not start with Great question, Absolutely, Certainly, As a role, I would say.\n"
+        "- Do not use: furthermore, additionally, leverage, utilize, delve, robust, seamless, passionate, in conclusion.\n"
+        "- Do not number points. No markdown, bullets, labels, or JSON.\n"
+        "- A little imperfect is good — hedges like we ended up, what actually bit us was.\n"
+        "- Draw.io / whiteboard / system design: say the NEXT boxes to draw, in order, as speech. Name the arrow. One tradeoff.\n"
+        "- If you can see the screen, only say what to add or fix next.\n"
+        "- Coding: the approach in one breath, then a tiny snippet."
+    )
+    user = (
+        f"They're asking:\n{_clip(question, 500) or '(latest in transcript)'}\n\n"
+        "Who they are (resume — only source of facts):\n"
+        f"{_clip(profile.get('resume', ''), 3500) or '(none — import a resume or answers will sound generic)'}\n\n"
+        "Role / job:\n"
+        f"{_clip(profile.get('jobDescription', ''), 700) or '(none)'}\n\n"
+        "Recent conversation:\n"
+        f"{_clip(transcript, 1200) or '(none)'}\n\n"
+        "Screen:\n"
+        f"{_clip(screen_text, 800) if kind in ('screen', 'draw') else '(n/a)'}\n"
+        f"{screen_note}\n\n"
+        f"Reply with only the words {name} should say next."
+    )
     return system, user
 
 
