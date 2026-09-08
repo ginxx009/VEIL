@@ -28,8 +28,12 @@ pyinstaller --noconfirm --clean --distpath "$ROOT/dist" --workpath "$ROOT/build/
   "$ROOT/mac/VEIL.spec"
 
 APP="$ROOT/dist/VEIL.app"
+if [ ! -d "$APP" ] && [ -d "$ROOT/dist/VEIL/VEIL.app" ]; then
+  APP="$ROOT/dist/VEIL/VEIL.app"
+fi
 if [ ! -d "$APP" ]; then
-  echo "PyInstaller did not produce VEIL.app" >&2
+  echo "PyInstaller did not produce VEIL.app under dist/" >&2
+  ls -la "$ROOT/dist" >&2 || true
   exit 1
 fi
 

@@ -1,7 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
 
-SPECDIR = Path(SPECPATH).resolve().parent
+# SPECPATH is the directory that contains this spec (mac/), not the file.
+SPECDIR = Path(SPECPATH).resolve()
 ROOT = SPECDIR.parent
 
 a = Analysis(

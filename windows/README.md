@@ -22,12 +22,20 @@ Paste an OpenAI `sk-…` key in Settings (Whisper + answers). Same resume / role
 
 ## Installer
 
-On a Windows machine (or via GitHub Actions):
+You cannot build a real `.exe` on a Mac. PyInstaller does not cross-compile Windows GUIs.
+
+**From your Mac:** GitHub → **Actions** → **Release installers** → **Run workflow** → wait → download artifact **VEIL-windows** (`VEIL.exe`).
+
+Or, if `gh` is installed:
+
+```bash
+gh workflow run "Release installers" --ref main
+```
+
+On a Windows PC:
 
 ```bat
 windows\build.bat
 ```
 
-That writes `dist\VEIL.exe`.
-
-A tagged push (`v1.0.0`) or **Actions → Release installers → Run workflow** uploads `VEIL.exe`.
+writes `dist\VEIL.exe`.
