@@ -186,67 +186,116 @@ def _provider(api_key: str) -> str:
     return "xai"
 
 
+def _http_err(e: urllib.error.HTTPError) -> str:
+    raw = ""
+    try:
+        raw = e.read().decode("utf-8", "replace")
+    except Exception:
+        pass
+    msg = str(e.reason)
+    try:
+        data = json.loads(raw)
+        err = data.get("error")
+        if isinstance(err, dict):
+            msg = err.get("message") or msg
+        elif isinstance(err, str):
+            msg = err
+        elif raw:
+            msg = raw[:400]
+    except Exception:
+        if raw:
+            msg = raw[:400]
+    return f"HTTP {e.code}: {msg}"
+
+
+def _openai_stream(url: str, api_key: str, model: str, system: str, user: str, max_tokens: int):
+    res = _open(
+        url,
+        {
+            "model": model,
+            "temperature": 0.4,
+            "max_tokens": max_tokens,
+            "stream": True,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        },
+        {"Authorization": f"Bearer {api_key}"},
+    )
+    with res:
+        for payload in _sse_payloads(res):
+            delta = (payload.get("choices") or [{}])[0].get("delta") or {}
+            piece = delta.get("content") or ""
+            if piece:
+                yield piece
+
+
+def _gemini_once(api_key: str, model: str, system: str, user: str, max_tokens: int) -> str:
+    res = _open(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        {
+            "system_instruction": {"parts": [{"text": system}]},
+            "contents": [{"parts": [{"text": user}]}],
+            "generationConfig": {"temperature": 0.4, "maxOutputTokens": max_tokens},
+        },
+        {"x-goog-api-key": api_key},
+    )
+    with res:
+        data = json.loads(res.read().decode("utf-8"))
+    parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+    return "".join(p.get("text", "") for p in parts if isinstance(p, dict))
+
+
 def _xai_stream(api_key: str, system: str, user: str, max_tokens: int):
     last = None
-    for model in ("grok-4-fast", "grok-4.5"):
+    for model in ("grok-4.5", "grok-4.3"):
         try:
-            res = _open(
+            yield from _openai_stream(
                 "https://api.x.ai/v1/chat/completions",
-                {
-                    "model": model,
-                    "temperature": 0.4,
-                    "max_tokens": max_tokens,
-                    "stream": True,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                },
-                {"Authorization": f"Bearer {api_key}"},
+                api_key,
+                model,
+                system,
+                user,
+                max_tokens,
             )
+            return
         except urllib.error.HTTPError as e:
-            last = e
+            last = _http_err(e)
             continue
-        with res:
-            for payload in _sse_payloads(res):
-                delta = (payload.get("choices") or [{}])[0].get("delta") or {}
-                piece = delta.get("content") or ""
-                if piece:
-                    yield piece
-        return
-    if last:
-        raise last
+    raise RuntimeError(last or "xAI request failed")
 
 
 def _gemini_stream(api_key: str, system: str, user: str, max_tokens: int):
     last = None
-    for model in ("gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"):
-        url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{model}:streamGenerateContent?alt=sse&key={api_key}"
-        )
+    models = ("gemini-2.0-flash", "gemini-2.5-flash", "gemini-3.8-flash", "gemini-flash-latest")
+    for model in models:
         try:
-            res = _open(
-                url,
-                {
-                    "systemInstruction": {"parts": [{"text": system}]},
-                    "contents": [{"role": "user", "parts": [{"text": user}]}],
-                    "generationConfig": {"temperature": 0.4, "maxOutputTokens": max_tokens},
-                },
+            yield from _openai_stream(
+                "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                api_key,
+                model,
+                system,
+                user,
+                max_tokens,
             )
+            return
         except urllib.error.HTTPError as e:
-            last = e
+            last = _http_err(e)
             continue
-        with res:
-            for payload in _sse_payloads(res):
-                parts = payload.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                for part in parts:
-                    piece = part.get("text") or ""
-                    if piece:
-                        yield piece
-        return
-    if last:
-        raise last
+    for model in models:
+        try:
+            text = _gemini_once(api_key, model, system, user, max_tokens)
+            if text.strip():
+                yield text
+                return
+        except urllib.error.HTTPError as e:
+            last = _http_err(e)
+            continue
+    hint = last or "Gemini request failed"
+    if "free tier" in hint.lower() or "FAILED_PRECONDITION" in hint:
+        hint += " Enable billing in Google AI Studio, or use an xAI key."
+    raise RuntimeError(hint)
 
 
 def _stream(api_key: str, system: str, user: str, max_tokens: int):
