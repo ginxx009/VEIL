@@ -174,10 +174,59 @@ def _extract_json(text: str):
 
 def _voice(mode: str) -> str:
     if mode == "interview":
-        return "The user is in a live job interview. Speak as them, first person, calm and specific. No filler, no 'great question'."
+        return (
+            "You are not a chatbot. You are this person's inner voice in a live interview. "
+            "Talk the way a real engineer talks out loud: contractions, one concrete story, "
+            "then stop. Never sound like a cover letter."
+        )
     if mode == "sales":
-        return "The user is on a live sales or customer call. Give concise commercial answers they can say out loud. Be honest about tradeoffs."
-    return "The user is in an internal meeting. Give short status-style answers: owner, status, risk, next step."
+        return (
+            "You are this person on a live sales call. Straight, commercial, a little informal. "
+            "Admit tradeoffs. No brochure language."
+        )
+    return (
+        "You are this person in an internal meeting. Status the way you'd say it on Slack: "
+        "owner, what's stuck, what happens next. No corporate theater."
+    )
+
+
+def _assist_prompts(profile, transcript, question, kind, screen_text):
+    name = profile.get("displayName") or "the candidate"
+    role = profile.get("role") or ""
+    system = f"""You write spoken lines for {name}{f", a {role}" if role else ""}.
+{_voice(profile.get("mode", "interview"))}
+
+They will read this out loud in the next 10 seconds. Write like speech, not like an essay.
+
+Hard rules:
+- First person only. You are {name}.
+- 2–5 short spoken sentences. Periods, not semicolons.
+- Use contractions (I'm, we've, that's).
+- Ground every claim in the resume. If it's not there, don't invent a company, metric, or title.
+- Pick ONE specific example (a system, a number, a failure) instead of a generic framework.
+- Do not start with "Great question", "Absolutely", "Certainly", "As a [role]", "I would say", "That's a really interesting".
+- Do not use: furthermore, additionally, leverage, utilize, delve, robust, seamless, passionate, excited to, in conclusion, first/second/third.
+- Do not number points. Do not use markdown, bullets, labels, or JSON.
+- It's okay to be slightly imperfect — a real person hedges ("we ended up…", "what actually bit us was…").
+- If you don't know, say a honest next step ("I'd want to see the traffic shape before locking the store").
+Coding: say the approach in one breath, then a tiny snippet, no tutorial voice."""
+    user = f"""They're asking:
+{_clip(question, 500) or "(latest in transcript)"}
+
+Who they are (resume — this is the only source of facts):
+{_clip(profile.get("resume", ""), 1800) or "(none)"}
+
+Role / job they're interviewing for:
+{_clip(profile.get("jobDescription", ""), 700) or "(none)"}
+
+Recent conversation:
+{_clip(transcript, 1200) or "(none)"}
+
+Screen:
+{_clip(screen_text, 800) if kind == "screen" else "(n/a)"}
+
+Reply with only the words {name} should say next."""
+    return system, user
 
 
 def _provider(api_key: str) -> str:
@@ -216,7 +265,7 @@ def _openai_stream(url: str, api_key: str, model: str, system: str, user: str, m
         url,
         {
             "model": model,
-            "temperature": 0.4,
+            "temperature": 0.7,
             "max_tokens": max_tokens,
             "stream": True,
             "messages": [
@@ -240,7 +289,7 @@ def _gemini_once(api_key: str, model: str, system: str, user: str, max_tokens: i
         {
             "system_instruction": {"parts": [{"text": system}]},
             "contents": [{"parts": [{"text": user}]}],
-            "generationConfig": {"temperature": 0.4, "maxOutputTokens": max_tokens},
+            "generationConfig": {"temperature": 0.7, "maxOutputTokens": max_tokens},
         },
         {"x-goog-api-key": api_key},
     )
@@ -335,23 +384,6 @@ def _chat(api_key: str, system: str, user: str, max_tokens: int) -> dict:
     return {"ok": True, "text": text}
 
 
-def _assist_prompts(profile, transcript, question, kind, screen_text):
-    system = f"""VEIL live earpiece. {_voice(profile.get("mode", "interview"))}
-Use the resume. Do not invent employers or metrics.
-Answer in 2–4 short spoken sentences, first person. No preamble, no markdown, no JSON.
-Coding: one-sentence approach, then a tiny snippet."""
-    user = f"""Q: {_clip(question, 500) or "(latest in transcript)"}
-RESUME:
-{_clip(profile.get("resume", ""), 1800) or "(none)"}
-ROLE:
-{_clip(profile.get("jobDescription", ""), 700) or "(none)"}
-HEARD:
-{_clip(transcript, 1200) or "(none)"}
-SCREEN:
-{_clip(screen_text, 800) if kind == "screen" else "(n/a)"}"""
-    return system, user
-
-
 def stream_assist(profile: dict, transcript: str, question: str, kind: str, screen_text: str):
     cfg = load_config()
     url = (cfg.get("api_url") or "").rstrip("/")
@@ -378,7 +410,7 @@ def stream_assist(profile: dict, transcript: str, question: str, kind: str, scre
     if not key:
         raise RuntimeError("Add an OpenAI API key in VEIL → Settings.")
     system, user = _assist_prompts(profile, transcript, question, kind, screen_text)
-    yield from _stream(key, system, user, 320 if kind == "screen" else 180)
+    yield from _stream(key, system, user, 360 if kind == "screen" else 240)
 
 
 def assist(profile: dict, transcript: str, question: str, kind: str, screen_text: str) -> dict:
