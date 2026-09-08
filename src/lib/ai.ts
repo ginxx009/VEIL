@@ -83,16 +83,16 @@ function modeVoice(mode: MeetingMode) {
   return "The user is in an internal meeting. Give short status-style answers: owner, status, risk, next step.";
 }
 
-export const generateAssist = createServerFn({ method: "POST" })
-  .validator((input: AssistInput) => input)
-  .handler(async ({ data }): Promise<{ ok: true; result: AssistResult } | { ok: false; error: string }> => {
-    const resume = clip(data.resume ?? "", MAX_RESUME);
-    const job = clip(data.job ?? "", MAX_JOB);
-    const transcript = clip(data.transcript ?? "", MAX_TRANSCRIPT);
-    const question = clip(data.question ?? "", MAX_QUESTION);
-    const screenText = clip(data.screenText ?? "", MAX_SCREEN);
+export async function runAssist(
+  data: AssistInput,
+): Promise<{ ok: true; result: AssistResult } | { ok: false; error: string }> {
+  const resume = clip(data.resume ?? "", MAX_RESUME);
+  const job = clip(data.job ?? "", MAX_JOB);
+  const transcript = clip(data.transcript ?? "", MAX_TRANSCRIPT);
+  const question = clip(data.question ?? "", MAX_QUESTION);
+  const screenText = clip(data.screenText ?? "", MAX_SCREEN);
 
-    const system = `You are VEIL, a private meeting copilot. Only the user can see your output.
+  const system = `You are VEIL, a private meeting copilot. Only the user can see your output.
 ${modeVoice(data.mode)}
 Ground every answer in their resume and the job/context when those are provided. Do not invent employers or metrics that are not in the resume.
 If this is a coding prompt, give a speakable approach first, then compact TypeScript.
@@ -101,7 +101,7 @@ Return ONLY JSON with keys:
 - points: string[] (2–4 short talking points)
 - code: string (code only if relevant, else empty string)`;
 
-    const user = `KIND: ${data.kind === "screen" ? "Solve or explain what is on the shared screen." : "Answer the latest question."}
+  const user = `KIND: ${data.kind === "screen" ? "Solve or explain what is on the shared screen." : "Answer the latest question."}
 RESUME:
 ${resume || "(none)"}
 
@@ -117,81 +117,89 @@ ${transcript || "(none)"}
 FOCUS QUESTION:
 ${question || "(use the latest interviewer question in the transcript)"}`;
 
-    const out = await chat(system, user, data.kind === "screen" ? 900 : 700);
-    if (!out.ok) return out;
+  const out = await chat(system, user, data.kind === "screen" ? 900 : 700);
+  if (!out.ok) return out;
 
-    const parsed = extractJson(out.text) as Partial<AssistResult> | null;
-    if (!parsed || typeof parsed.spoken !== "string") {
-      return {
-        ok: true,
-        result: { spoken: out.text.trim(), points: [], code: "" },
-      };
-    }
+  const parsed = extractJson(out.text) as Partial<AssistResult> | null;
+  if (!parsed || typeof parsed.spoken !== "string") {
     return {
       ok: true,
-      result: {
-        spoken: parsed.spoken,
-        points: Array.isArray(parsed.points) ? parsed.points.map(String).slice(0, 6) : [],
-        code: typeof parsed.code === "string" ? parsed.code : "",
+      result: { spoken: out.text.trim(), points: [], code: "" },
+    };
+  }
+  return {
+    ok: true,
+    result: {
+      spoken: parsed.spoken,
+      points: Array.isArray(parsed.points) ? parsed.points.map(String).slice(0, 6) : [],
+      code: typeof parsed.code === "string" ? parsed.code : "",
+    },
+  };
+}
+
+export async function runNotes(
+  data: NotesInput,
+): Promise<{ ok: true; notes: SessionNotes } | { ok: false; error: string }> {
+  const transcript = clip(data.transcript ?? "", MAX_TRANSCRIPT);
+  if (!transcript.trim()) {
+    return {
+      ok: true,
+      notes: {
+        summary: "No transcript was captured in this session.",
+        keyPoints: [],
+        questions: [],
+        actionItems: [],
+        followUpEmail: "",
       },
     };
-  });
+  }
 
-export const generateNotes = createServerFn({ method: "POST" })
-  .validator((input: NotesInput) => input)
-  .handler(async ({ data }): Promise<{ ok: true; notes: SessionNotes } | { ok: false; error: string }> => {
-    const transcript = clip(data.transcript ?? "", MAX_TRANSCRIPT);
-    if (!transcript.trim()) {
-      return {
-        ok: true,
-        notes: {
-          summary: "No transcript was captured in this session.",
-          keyPoints: [],
-          questions: [],
-          actionItems: [],
-          followUpEmail: "",
-        },
-      };
-    }
-
-    const system = `You write private post-call notes for VEIL.
+  const system = `You write private post-call notes for VEIL.
 Return ONLY JSON with keys:
 - summary: string (1 short paragraph)
-- keyPoints: string[] 
+- keyPoints: string[]
 - questions: string[] (questions the other person asked)
 - actionItems: string[]
 - followUpEmail: string (a send-ready email, plain text)`;
 
-    const user = `MODE: ${data.mode}
+  const user = `MODE: ${data.mode}
 RESUME: ${clip(data.resume ?? "", 2000)}
 CONTEXT: ${clip(data.job ?? "", 1500)}
 TRANSCRIPT:
 ${transcript}`;
 
-    const out = await chat(system, user, 1100);
-    if (!out.ok) return out;
-    const parsed = extractJson(out.text) as Partial<SessionNotes> | null;
-    if (!parsed || typeof parsed.summary !== "string") {
-      return {
-        ok: true,
-        notes: {
-          summary: out.text.trim(),
-          keyPoints: [],
-          questions: [],
-          actionItems: [],
-          followUpEmail: "",
-        },
-      };
-    }
-    const list = (v: unknown) => (Array.isArray(v) ? v.map(String).slice(0, 8) : []);
+  const out = await chat(system, user, 1100);
+  if (!out.ok) return out;
+  const parsed = extractJson(out.text) as Partial<SessionNotes> | null;
+  if (!parsed || typeof parsed.summary !== "string") {
     return {
       ok: true,
       notes: {
-        summary: parsed.summary,
-        keyPoints: list(parsed.keyPoints),
-        questions: list(parsed.questions),
-        actionItems: list(parsed.actionItems),
-        followUpEmail: typeof parsed.followUpEmail === "string" ? parsed.followUpEmail : "",
+        summary: out.text.trim(),
+        keyPoints: [],
+        questions: [],
+        actionItems: [],
+        followUpEmail: "",
       },
     };
-  });
+  }
+  const list = (v: unknown) => (Array.isArray(v) ? v.map(String).slice(0, 8) : []);
+  return {
+    ok: true,
+    notes: {
+      summary: parsed.summary,
+      keyPoints: list(parsed.keyPoints),
+      questions: list(parsed.questions),
+      actionItems: list(parsed.actionItems),
+      followUpEmail: typeof parsed.followUpEmail === "string" ? parsed.followUpEmail : "",
+    },
+  };
+}
+
+export const generateAssist = createServerFn({ method: "POST" })
+  .validator((input: AssistInput) => input)
+  .handler(async ({ data }) => runAssist(data));
+
+export const generateNotes = createServerFn({ method: "POST" })
+  .validator((input: NotesInput) => input)
+  .handler(async ({ data }) => runNotes(data));

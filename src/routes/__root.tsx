@@ -15,7 +15,7 @@ export const Route = createRootRoute({
       { title: APP_NAME },
       {
         name: "description",
-        content: "Private meeting copilot. Live answers on your display — excluded from their screen share.",
+        content: "Private Mac overlay for live meetings. Excluded from their screen share.",
       },
       { name: "theme-color", content: "#09090b" },
     ],

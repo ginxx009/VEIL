@@ -10,53 +10,53 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as NotesRouteImport } from './routes/notes'
-import { Route as SessionRouteImport } from './routes/session'
+import { Route as ApiAssistRouteImport } from './routes/api/assist'
+import { Route as ApiNotesRouteImport } from './routes/api/notes'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const NotesRoute = NotesRouteImport.update({
-  id: '/notes',
-  path: '/notes',
+const ApiAssistRoute = ApiAssistRouteImport.update({
+  id: '/api/assist',
+  path: '/api/assist',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SessionRoute = SessionRouteImport.update({
-  id: '/session',
-  path: '/session',
+const ApiNotesRoute = ApiNotesRouteImport.update({
+  id: '/api/notes',
+  path: '/api/notes',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/notes': typeof NotesRoute
-  '/session': typeof SessionRoute
+  '/api/assist': typeof ApiAssistRoute
+  '/api/notes': typeof ApiNotesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/notes': typeof NotesRoute
-  '/session': typeof SessionRoute
+  '/api/assist': typeof ApiAssistRoute
+  '/api/notes': typeof ApiNotesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/notes': typeof NotesRoute
-  '/session': typeof SessionRoute
+  '/api/assist': typeof ApiAssistRoute
+  '/api/notes': typeof ApiNotesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/notes' | '/session'
+  fullPaths: '/' | '/api/assist' | '/api/notes'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/notes' | '/session'
-  id: '__root__' | '/' | '/notes' | '/session'
+  to: '/' | '/api/assist' | '/api/notes'
+  id: '__root__' | '/' | '/api/assist' | '/api/notes'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  NotesRoute: typeof NotesRoute
-  SessionRoute: typeof SessionRoute
+  ApiAssistRoute: typeof ApiAssistRoute
+  ApiNotesRoute: typeof ApiNotesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -68,18 +68,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/notes': {
-      id: '/notes'
-      path: '/notes'
-      fullPath: '/notes'
-      preLoaderRoute: typeof NotesRouteImport
+    '/api/assist': {
+      id: '/api/assist'
+      path: '/api/assist'
+      fullPath: '/api/assist'
+      preLoaderRoute: typeof ApiAssistRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/session': {
-      id: '/session'
-      path: '/session'
-      fullPath: '/session'
-      preLoaderRoute: typeof SessionRouteImport
+    '/api/notes': {
+      id: '/api/notes'
+      path: '/api/notes'
+      fullPath: '/api/notes'
+      preLoaderRoute: typeof ApiNotesRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -87,8 +87,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  NotesRoute: NotesRoute,
-  SessionRoute: SessionRoute,
+  ApiAssistRoute: ApiAssistRoute,
+  ApiNotesRoute: ApiNotesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

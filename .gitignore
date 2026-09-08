@@ -3,3 +3,8 @@ node_modules/
 .github_repo
 .env
 .env.*
+__pycache__/
+*.pyc
+.vercel/
+screenshots/
+.grok/preview.log

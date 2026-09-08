@@ -44,8 +44,8 @@ export function LandingDemo() {
               error={null}
               prompt={prompt}
               onPrompt={setPrompt}
-              onAssist={() => toast.message("Open the copilot to generate live answers.")}
-              onScreen={() => toast.message("Open the copilot to solve the shared screen.")}
+              onAssist={() => toast.message("The Mac app generates live answers. This view is a rehearsal.")}
+              onScreen={() => toast.message("The Mac app solves the shared screen. This view is a rehearsal.")}
               onToggleStealth={() => setStealthOn((s) => !s)}
               onHide={() => setOverlayVisible(false)}
             />

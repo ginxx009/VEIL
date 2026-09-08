@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Copy, Eye, EyeOff, Keyboard, Monitor, CornerDownLeft, X } from "lucide-react";
+import { Copy, Eye, EyeOff, Keyboard, Monitor, CornerDownLeft, PictureInPicture2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,8 @@ export function OverlayPanel({
   onScreen,
   onToggleStealth,
   onHide,
-  compact,
+  onPopOut,
+  variant = "float",
 }: {
   stealthOn: boolean;
   visible: boolean;
@@ -31,17 +32,21 @@ export function OverlayPanel({
   onAssist: () => void;
   onScreen: () => void;
   onToggleStealth: () => void;
-  onHide: () => void;
-  compact?: boolean;
+  onHide?: () => void;
+  onPopOut?: () => void;
+  variant?: "float" | "app";
 }) {
   if (!visible) return null;
   const mod = modKeyLabel();
+  const app = variant === "app";
 
   return (
     <div
       className={cn(
-        "pointer-events-auto absolute inset-x-3 top-3 z-20 flex max-h-[calc(100%-0.75rem)] flex-col gap-2 overflow-y-auto",
-        compact ? "max-w-full" : "mx-auto max-w-lg",
+        "flex flex-col gap-2",
+        app
+          ? "h-full min-h-0 overflow-y-auto p-3"
+          : "pointer-events-auto absolute inset-x-3 top-3 z-20 mx-auto max-h-[calc(100%-0.75rem)] max-w-lg overflow-y-auto",
       )}
     >
       <div className="flex items-center gap-1 rounded-full bg-card/92 px-1.5 py-1 shadow-[var(--shadow-border),var(--shadow-float)] backdrop-blur-md">
@@ -63,15 +68,22 @@ export function OverlayPanel({
           Screen
         </button>
         <div className="ml-auto flex items-center">
+          {onPopOut ? (
+            <IconBtn label="Pop out overlay" onClick={onPopOut}>
+              <PictureInPicture2 className="size-3.5" />
+            </IconBtn>
+          ) : null}
           <IconBtn
             label={stealthOn ? "Show on share" : "Hide from share"}
             onClick={onToggleStealth}
           >
             {stealthOn ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
           </IconBtn>
-          <IconBtn label="Hide overlay" onClick={onHide}>
-            <X className="size-3.5" />
-          </IconBtn>
+          {onHide ? (
+            <IconBtn label="Hide overlay" onClick={onHide}>
+              <X className="size-3.5" />
+            </IconBtn>
+          ) : null}
         </div>
       </div>
 
@@ -85,7 +97,7 @@ export function OverlayPanel({
         <Input
           value={prompt}
           onChange={(e) => onPrompt(e.target.value)}
-          placeholder={`Ask, or ${mod}+Enter for Assist`}
+          placeholder={`Ask, or ${mod}+Enter`}
           className="h-10 rounded-lg bg-transparent shadow-none focus-visible:ring-0"
         />
         <Button type="submit" size="sm" className="h-10 rounded-lg px-3">
@@ -94,7 +106,7 @@ export function OverlayPanel({
         </Button>
       </form>
 
-      <div className="rounded-xl bg-card/92 p-3.5 shadow-[var(--shadow-border)] backdrop-blur-md">
+      <div className="min-h-0 flex-1 rounded-xl bg-card/92 p-3.5 shadow-[var(--shadow-border)] backdrop-blur-md">
         {status === "thinking" ? (
           <p className="veil-shimmer bg-clip-text text-sm text-muted-foreground">Writing a speakable answer…</p>
         ) : status === "error" ? (
@@ -141,13 +153,11 @@ export function OverlayPanel({
           <div className="space-y-2 text-xs text-muted-foreground">
             <p className="flex items-center gap-2">
               <Keyboard className="size-3.5" />
-              {mod}+Enter assist · {mod}+Shift+E stealth · {mod}+Shift+H hide
+              {mod}+Enter assist · {mod}+Shift+E stealth
             </p>
             <p className="flex items-center gap-2">
               <Monitor className="size-3.5" />
-              {stealthOn
-                ? "Excluded from the shared frame. Their share stays clean."
-                : "Stealth is off — the overlay will appear on their screen share."}
+              On Mac, this HUD is a capture-excluded window. Here, toggle stealth and watch their share.
             </p>
           </div>
         )}
