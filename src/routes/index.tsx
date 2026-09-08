@@ -52,8 +52,8 @@ function Home() {
               </li>
               <li className="flex gap-3">
                 <span className="font-mono text-xs text-sage">2</span>
-                Double-click Launch.command. First run installs PyObjC; after that VEIL lives in the
-                menu bar.
+                Double-click Launch.command. It creates a local Python environment (Homebrew
+                Python will not let pip install system-wide) and VEIL appears in the menu bar.
               </li>
               <li className="flex gap-3">
                 <span className="font-mono text-xs text-sage">3</span>

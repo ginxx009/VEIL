@@ -5,6 +5,7 @@ node_modules/
 .env.*
 __pycache__/
 *.pyc
+.venv/
 .vercel/
 screenshots/
 .grok/preview.log
