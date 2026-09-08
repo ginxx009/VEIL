@@ -576,7 +576,7 @@ class HUD:
         if self.phase != "live":
             return
         if self.listening:
-            self._stop_mic()
+            self._stop_mic(flush=True)
             self.show_live()
             return
         self.listening = True
@@ -585,7 +585,12 @@ class HUD:
         self.show_live()
         self.listener.start()
 
-    def _stop_mic(self):
+    def _stop_mic(self, flush=False):
+        if flush and self.listener is not None:
+            try:
+                self.listener.flush_now()
+            except Exception:
+                pass
         self.listening = False
         self.hearing = ""
         if self.listener is not None:

@@ -246,4 +246,16 @@ class Listener:
         self._last_final = text
         print(f"VEIL question: {text}", flush=True)
         self.on_final(text)
-        self._restart_soon()
+        if self.running:
+            self._restart_soon()
+
+    def flush_now(self):
+        """Treat whatever was just heard as the last question, then the caller can stop."""
+        with self._lock:
+            text = (self._partial or "").strip()
+            self._partial = ""
+            if self._timer is not None:
+                self._timer.cancel()
+                self._timer = None
+        if text:
+            self._emit_final(text)
