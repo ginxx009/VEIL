@@ -377,9 +377,9 @@ class HUD:
         cfg = engine.load_config()
         self.body.addSubview_(label("Settings", NSMakeRect(20, H - 56, 200, 28), 22, medium=True))
         self.body.addSubview_(
-            label("xAI API key (stored on this Mac only)", NSMakeRect(20, H - 100, 380, 16), 11, muted=True)
+            label("API key — xAI (xai-…) or Gemini (AIza…)", NSMakeRect(20, H - 100, 380, 16), 11, muted=True)
         )
-        self.key_field = field(NSMakeRect(20, H - 136, 380, 32), "xai-...")
+        self.key_field = field(NSMakeRect(20, H - 136, 380, 32), "xai-… or AIza…")
         self.key_field.setStringValue_(cfg.get("api_key", ""))
         self.body.addSubview_(self.key_field)
         self.body.addSubview_(

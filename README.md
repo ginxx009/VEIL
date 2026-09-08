@@ -21,7 +21,8 @@ Already cloned? `git pull origin main` then the `venv` steps from `VEIL/mac`.
 
 A VEIL extra appears in the menu bar. The HUD floats over the call.
 
-1. Add an [xAI API key](https://console.x.ai/) in **Settings** (or set `XAI_API_KEY`).
+1. Add an [xAI](https://console.x.ai/) or [Gemini](https://aistudio.google.com/apikey) API key in **Settings** (or set `XAI_API_KEY` / `GEMINI_API_KEY`).
+   Keys starting with `AIza` use Gemini; `xai-` uses xAI.
 2. Launch a room.
 3. Share **Meet / Zoom / your editor** — never the overlay window.
 

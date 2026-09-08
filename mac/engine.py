@@ -92,9 +92,14 @@ def save_profile(profile: dict) -> None:
 
 
 def load_config() -> dict:
-    env_url = os.environ.get("VEIL_API_URL", "")
-    env_key = os.environ.get("XAI_API_KEY", "")
     file_cfg = _read_json(CONFIG, {})
+    env_key = (
+        os.environ.get("XAI_API_KEY")
+        or os.environ.get("GEMINI_API_KEY")
+        or os.environ.get("GOOGLE_API_KEY")
+        or ""
+    )
+    env_url = os.environ.get("VEIL_API_URL", "")
     return {
         "api_url": env_url or file_cfg.get("api_url", ""),
         "api_key": env_key or file_cfg.get("api_key", ""),
@@ -149,6 +154,13 @@ def _voice(mode: str) -> str:
     return "The user is in an internal meeting. Give short status-style answers: owner, status, risk, next step."
 
 
+def _provider(api_key: str) -> str:
+    key = (api_key or "").strip()
+    if key.startswith("AIza") or os.environ.get("GEMINI_API_KEY") == key:
+        return "gemini"
+    return "xai"
+
+
 def _xai_chat(api_key: str, system: str, user: str, max_tokens: int) -> dict:
     data = _post_json(
         "https://api.x.ai/v1/chat/completions",
@@ -164,6 +176,41 @@ def _xai_chat(api_key: str, system: str, user: str, max_tokens: int) -> dict:
         {"Authorization": f"Bearer {api_key}"},
     )
     return {"ok": True, "text": data.get("choices", [{}])[0].get("message", {}).get("content", "")}
+
+
+def _gemini_chat(api_key: str, system: str, user: str, max_tokens: int) -> dict:
+    last = None
+    for model in ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"):
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{model}:generateContent?key={api_key}"
+        )
+        try:
+            data = _post_json(
+                url,
+                {
+                    "systemInstruction": {"parts": [{"text": system}]},
+                    "contents": [{"role": "user", "parts": [{"text": user}]}],
+                    "generationConfig": {"temperature": 0.55, "maxOutputTokens": max_tokens},
+                },
+            )
+        except urllib.error.HTTPError as e:
+            last = e
+            continue
+        parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+        text = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
+        if text.strip():
+            return {"ok": True, "text": text}
+        last = RuntimeError(data.get("error", {}).get("message") or "Empty Gemini response")
+    if last:
+        raise last
+    return {"ok": True, "text": ""}
+
+
+def _chat(api_key: str, system: str, user: str, max_tokens: int) -> dict:
+    if _provider(api_key) == "gemini":
+        return _gemini_chat(api_key, system, user, max_tokens)
+    return _xai_chat(api_key, system, user, max_tokens)
 
 
 def assist(profile: dict, transcript: str, question: str, kind: str, screen_text: str) -> dict:
@@ -190,7 +237,7 @@ def assist(profile: dict, transcript: str, question: str, kind: str, screen_text
     if not key:
         return {
             "ok": False,
-            "error": "Add an xAI API key in VEIL → Settings, or set XAI_API_KEY.",
+            "error": "Add an xAI or Gemini API key in VEIL → Settings.",
         }
 
     system = f"""You are VEIL, a private meeting copilot. Only the user can see your output.
@@ -217,7 +264,7 @@ TRANSCRIPT (latest last):
 FOCUS QUESTION:
 {_clip(question, 1200) or "(use the latest interviewer question in the transcript)"}"""
     try:
-        out = _xai_chat(key, system, user, 900 if kind == "screen" else 700)
+        out = _chat(key, system, user, 900 if kind == "screen" else 700)
     except Exception as e:
         return {"ok": False, "error": str(e)}
     parsed = _extract_json(out["text"]) or {}
@@ -249,7 +296,7 @@ def notes(profile: dict, transcript: str) -> dict:
             return {"ok": False, "error": str(e)}
     key = cfg.get("api_key") or ""
     if not key:
-        return {"ok": False, "error": "Add an xAI API key in VEIL → Settings."}
+        return {"ok": False, "error": "Add an xAI or Gemini API key in VEIL → Settings."}
     if not transcript.strip():
         return {
             "ok": True,
@@ -270,7 +317,7 @@ Return ONLY JSON with keys:
 - followUpEmail: string (a send-ready email, plain text)"""
     user = f"MODE: {payload['mode']}\nRESUME: {payload['resume'][:2000]}\nCONTEXT: {payload['job'][:1500]}\nTRANSCRIPT:\n{_clip(transcript, 4500)}"
     try:
-        out = _xai_chat(key, system, user, 1100)
+        out = _chat(key, system, user, 1100)
     except Exception as e:
         return {"ok": False, "error": str(e)}
     parsed = _extract_json(out["text"]) or {}
