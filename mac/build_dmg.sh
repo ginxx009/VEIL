@@ -57,6 +57,17 @@ rm -rf "$ROOT/dist/dmg"
 mkdir -p "$ROOT/dist/dmg"
 cp -R "$APP" "$ROOT/dist/dmg/VEIL.app"
 ln -s /Applications "$ROOT/dist/dmg/Applications"
+cat > "$ROOT/dist/dmg/How to open.txt" <<'EOF'
+Drag VEIL into Applications, then open it.
+
+If macOS says it can't be opened because it is from an unidentified developer:
+1. Right-click VEIL
+2. Click Open
+3. Click Open again
+
+That is a one-time Gatekeeper step for apps you download yourself.
+First launch will ask for Microphone and Speech Recognition — click Allow.
+EOF
 
 DMG="$ROOT/dist/VEIL.dmg"
 rm -f "$DMG"
