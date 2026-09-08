@@ -215,64 +215,105 @@ def _extract_json(text: str):
         return None
 
 
-def _voice(mode: str) -> str:
-    if mode == "interview":
-        return (
-            "You are not a chatbot. You are this person's inner voice in a live interview. "
-            "Talk the way a real engineer talks out loud: contractions, one concrete story, "
-            "then stop. Never sound like a cover letter."
+def _voice(mode: str, profile: dict) -> str:
+    role = (profile.get("role") or "").strip()
+    blob = f"{role}\n{profile.get('resume') or ''}\n{profile.get('jobDescription') or ''}".lower()
+    salesforce = any(
+        k in blob
+        for k in (
+            "salesforce",
+            "sfdc",
+            "apex",
+            "lwc",
+            "lightning",
+            "sales cloud",
+            "service cloud",
+            "experience cloud",
+            "marketing cloud",
+            "npsp",
+            "cpq",
+            "soql",
         )
-    if mode == "sales":
-        return (
-            "You are this person on a live sales call. Straight, commercial, a little informal. "
-            "Admit tradeoffs. No brochure language."
-        )
-    return (
-        "You are this person in an internal meeting. Status the way you'd say it on Slack: "
-        "owner, what's stuck, what happens next. No corporate theater."
     )
+    if mode == "sales":
+        return "Live sales call. Senior. Straight commercial talk, honest tradeoffs, no brochure."
+    if mode == "meeting":
+        return "Internal meeting. Owner, what's stuck, blast radius, next step. No theater."
+    extra = (
+        " This is a senior Salesforce / cloud engineer: talk org shape, data model, "
+        "sharing (OWD, roles, sharing rules), governor limits, integration pattern "
+        "(platform events, named credentials, middleware), what you'd actually ship "
+        "in an enterprise org. Not Trailhead. Not admin click-path. Not junior reciting objects."
+        if salesforce
+        else (
+            " Senior engineer: decision first, constraint, one production story. "
+            "Talk blast radius, failure mode, what you'd defer. Not a bootcamp answer."
+        )
+    )
+    return (
+        f"You are this person in a live interview, role: {role or 'senior engineer'}.{extra} "
+        "Sound like you talking, not like generated text."
+    )
+
+
+def _is_draw_question(question: str) -> bool:
+    q = (question or "").lower()
+    needles = (
+        "draw.io",
+        "drawio",
+        "excalidraw",
+        "lucidchart",
+        "on the whiteboard",
+        "on a whiteboard",
+        "use the whiteboard",
+        "draw this on",
+        "draw it on",
+        "open a diagram",
+        "share the canvas",
+    )
+    return any(n in q for n in needles)
 
 
 def _assist_prompts(profile, transcript, question, kind, screen_text):
     name = profile.get("displayName") or "the candidate"
-    role = profile.get("role") or ""
-    who = f"{name}, a {role}" if role else name
-    screen_note = ""
-    if kind in ("screen", "draw"):
-        screen_note = (
-            "A screenshot of their display is attached. "
-            "If it is draw.io or a whiteboard, coach the next boxes only."
+    role = profile.get("role") or "senior engineer"
+    drawing = kind == "draw" or _is_draw_question(question)
+    draw_rule = (
+        "They asked you to DRAW. Talk the next boxes to put on the canvas, in order, as speech. "
+        "Name the arrow. One tradeoff. Do not dump a whole architecture essay."
+        if drawing
+        else (
+            "Do NOT describe boxes, arrows, draw.io, or a whiteboard. "
+            "They did not ask you to draw. Answer the question out loud like a senior in the room."
         )
+    )
     system = (
-        f"You write spoken lines for {who}.\n"
-        f"{_voice(profile.get('mode', 'interview'))}\n\n"
-        "They will read this out loud in the next 10 seconds. Write like speech, not like an essay.\n\n"
+        f"You write spoken lines for {name}, {role}.\n"
+        f"{_voice(profile.get('mode', 'interview'), profile)}\n\n"
+        "They will say this out loud in the next 15 seconds. Speech, not an essay.\n\n"
         "Hard rules:\n"
-        f"- First person only. You are {name}.\n"
-        "- 2 to 5 short spoken sentences. Periods, not semicolons.\n"
-        "- Use contractions (I'm, we've, that's).\n"
-        "- Ground every claim in the resume. If it is not there, do not invent a company, metric, or title.\n"
-        "- Pick ONE specific example (a system, a number, a failure) instead of a generic framework.\n"
-        "- Do not start with Great question, Absolutely, Certainly, As a role, I would say.\n"
-        "- Do not use: furthermore, additionally, leverage, utilize, delve, robust, seamless, passionate, in conclusion.\n"
-        "- Do not number points. No markdown, bullets, labels, or JSON.\n"
-        "- A little imperfect is good — hedges like we ended up, what actually bit us was.\n"
-        "- Draw.io / whiteboard / system design: say the NEXT boxes to draw, in order, as speech. Name the arrow. One tradeoff.\n"
-        "- If you can see the screen, only say what to add or fix next.\n"
-        "- Coding: the approach in one breath, then a tiny snippet."
+        f"- First person only. You are {name}, a {role}.\n"
+        "- 4 to 8 short spoken sentences. Periods, not semicolons.\n"
+        "- Contractions. Senior tone: calm, specific, a little blunt.\n"
+        "- Ground every claim in the resume. Do not invent employers, orgs, or metrics.\n"
+        "- Lead with the call you'd make, then why, then one thing that went wrong in prod.\n"
+        "- Name a real constraint (limits, sharing, latency, cost, blast radius).\n"
+        "- If the question is vague, say what you'd need to know before locking the design.\n"
+        "- Do not start with Great question, Absolutely, Certainly, As a senior, I would say.\n"
+        "- No: furthermore, leverage, utilize, robust, seamless, passionate, circling back.\n"
+        "- No markdown, bullets, numbered points, JSON, or labels.\n"
+        f"- {draw_rule}\n"
+        "- Coding: the approach in one breath, then a tiny snippet, no tutorial."
     )
     user = (
-        f"They're asking:\n{_clip(question, 500) or '(latest in transcript)'}\n\n"
-        "Who they are (resume — only source of facts):\n"
-        f"{_clip(profile.get('resume', ''), 3500) or '(none — import a resume or answers will sound generic)'}\n\n"
-        "Role / job:\n"
-        f"{_clip(profile.get('jobDescription', ''), 700) or '(none)'}\n\n"
+        f"They're asking:\n{_clip(question, 700) or '(latest in transcript)'}\n\n"
+        "Resume (only source of facts — speak from this):\n"
+        f"{_clip(profile.get('resume', ''), 5000) or '(none — paste a resume or answers stay generic)'}\n\n"
+        "Role / job they're interviewing for:\n"
+        f"{_clip(profile.get('jobDescription', ''), 1200) or '(none)'}\n\n"
         "Recent conversation:\n"
-        f"{_clip(transcript, 1200) or '(none)'}\n\n"
-        "Screen:\n"
-        f"{_clip(screen_text, 800) if kind in ('screen', 'draw') else '(n/a)'}\n"
-        f"{screen_note}\n\n"
-        f"Reply with only the words {name} should say next."
+        f"{_clip(transcript, 1500) or '(none)'}\n\n"
+        f"Reply with only the words {name} should say next. Senior. No drawing unless asked."
     )
     return system, user
 
@@ -322,7 +363,7 @@ def _openai_stream(url: str, api_key: str, model: str, system: str, user: str, m
         url,
         {
             "model": model,
-            "temperature": 0.7,
+            "temperature": 0.5,
             "max_tokens": max_tokens,
             "stream": True,
             "messages": [
@@ -468,33 +509,17 @@ def stream_assist(profile: dict, transcript: str, question: str, kind: str, scre
     if not key:
         raise RuntimeError("Add an OpenAI API key in VEIL → Settings.")
     q = (question or "").lower()
-    draw = any(
-        h in q
-        for h in (
-            "draw.io",
-            "drawio",
-            "whiteboard",
-            "diagram",
-            "system design",
-            "excalidraw",
-            "lucid",
-            "sketch",
-            "draw the",
-            "draw a",
-            "on the board",
-        )
-    )
-    if draw and kind != "screen":
+    if kind != "screen" and _is_draw_question(q):
         kind = "draw"
     image = None
-    if kind in ("screen", "draw"):
+    if kind == "screen" or kind == "draw":
         image = capture_screen()
     system, user = _assist_prompts(profile, transcript, question, kind, screen_text)
     yield from _stream(
         key,
         system,
         user,
-        420 if kind in ("screen", "draw") else 240,
+        420 if kind in ("screen", "draw") else 360,
         image_b64=image,
     )
 
