@@ -40,6 +40,7 @@ DEFAULT_PROFILE = {
     ),
     "mode": "interview",
     "agenticFacts": "",
+    "projects": "",
 }
 
 MODE_COPY = {
@@ -250,7 +251,7 @@ def _extract_json(text: str):
 
 def _voice(mode: str, profile: dict) -> str:
     role = (profile.get("role") or "").strip()
-    blob = f"{role}\n{profile.get('resume') or ''}\n{profile.get('jobDescription') or ''}\n{profile.get('agenticFacts') or ''}".lower()
+    blob = f"{role}\n{profile.get('resume') or ''}\n{profile.get('jobDescription') or ''}\n{profile.get('agenticFacts') or ''}\n{profile.get('projects') or ''}".lower()
     salesforce = any(
         k in blob
         for k in (
@@ -351,7 +352,7 @@ def speech_hints(profile: dict | None = None) -> list[str]:
             seen.append(w)
     blob = ""
     if profile:
-        blob = f"{profile.get('resume') or ''} {profile.get('jobDescription') or ''} {profile.get('role') or ''} {profile.get('agenticFacts') or ''}"
+        blob = f"{profile.get('resume') or ''} {profile.get('jobDescription') or ''} {profile.get('role') or ''} {profile.get('agenticFacts') or ''} {profile.get('projects') or ''}"
     for token in blob.replace("/", " ").replace(",", " ").split():
         t = token.strip(".-()[]")
         if len(t) < 4 or not any(c.isalpha() for c in t):
@@ -453,7 +454,7 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         "- Agentic coding: name the real tools on the resume (Cursor, Claude Code, Copilot, etc.) and the workflow (how the team used it, review, tests, human sign-off). Do not substitute generic 'standards and unit-test gating' unless that is on the resume.\n"
         "- HARD FACTS are for agentic / AI-tool questions only (years, Cursor, Claude Code, Dynaskills, team workflow). Dynaskills is skills/personas for agents, not a production product unless the resume says it is.\n"
         "- If they asked years / which tools / impact: answer those three from HARD FACTS first, then the resume. If HARD FACTS lists Cursor or Claude Code, you have used them. Never say you have not used a tool that is in HARD FACTS.\n"
-        "- Architecture / scale / HA / cloud / 'a time you owned a decision': pick ONE system from the resume. Why that shape, one alternative you actually considered, how it stays maintainable. Do not recast Cursor, Claude Code, or Dynaskills as a microservices platform, Node app, or high-traffic product.\n"
+        "- Architecture / scale / HA / cloud / 'a time you owned a decision': pick ONE system from PRODUCTS / PROJECTS first, then the resume. Why that shape, one alternative you actually considered, how it stays maintainable. Do not recast Cursor, Claude Code, or Dynaskills as a microservices platform unless PRODUCTS lists it as a shipped product.\n"
         "- Do not describe agentic coding as generating boilerplate or autocomplete. That is the answer this interviewer is screening out.\n"
         "- Name a real constraint only if it belongs in that design answer (limits, sharing, latency, cost).\n"
         "- If the question is vague, say what you'd need to know — do not pad with an anecdote.\n"
@@ -466,6 +467,8 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
     user = (
         "HARD FACTS — this is true. Do not contradict it. If empty, do not invent tools or years:\n"
         f"{_clip(profile.get('agenticFacts', ''), 2000) or '(none — then you may not claim Cursor, Claude Code, or Copilot years)'}\n\n"
+        "PRODUCTS / PROJECTS you built or are building — architecture and ownership answers MUST come from here. Do not invent a product:\n"
+        f"{_clip(profile.get('projects', ''), 4000) or '(none — then use the resume only; do not invent a platform)'}\n\n"
         f"They're asking:\n{_clip(question, 700) or '(latest in transcript)'}\n\n"
         "Resume (facts only):\n"
         f"{_clip(profile.get('resume', ''), 5000) or '(none)'}\n\n"

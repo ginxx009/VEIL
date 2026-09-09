@@ -268,18 +268,20 @@ def test_architecture_prompt_forbids_dynaskills_as_product():
         "role": "Principal Engineer",
         "resume": "Designed a multi-AZ payments API on AWS.",
         "agenticFacts": "Cursor CLI, Claude Code, Dynaskills personas.",
+        "projects": "Payments API on AWS, multi-AZ, SQS over a cron. Alternative was a bigger RDS.",
         "jobDescription": "Principal Engineer",
         "mode": "interview",
     }
-    system, _ = engine._assist_prompts(
+    system, user = engine._assist_prompts(
         profile,
         "",
         "tell me about a time you independently owned an architectural decision for a product",
         "answer",
         "",
     )
-    assert "Do not recast" in system
-    assert "resume" in system.lower()
+    assert "PRODUCTS / PROJECTS" in user
+    assert "Payments API" in user
+    assert "PRODUCTS / PROJECTS first" in system
 
 
 def test_repair_asr_architecture_question():

@@ -198,7 +198,9 @@ class HUD:
         self._label("Job or meeting context")
         self.job_field = self._text(self.body, self.profile.get("jobDescription", ""), height=3)
         self._label("Agentic facts — years, Cursor CLI, Claude Code, Dynaskills, impact")
-        self.agentic_field = self._text(self.body, self.profile.get("agenticFacts", ""), height=4)
+        self.agentic_field = self._text(self.body, self.profile.get("agenticFacts", ""), height=3)
+        self._label("Products / projects — name, architecture, alternative, how it scales")
+        self.projects_field = self._text(self.body, self.profile.get("projects", ""), height=4)
         foot = tk.Frame(self.body, bg=BG)
         foot.pack(fill="x", padx=20, pady=16)
         self._btn(foot, "Launch overlay", self.launch, "sage").pack(side="left")
@@ -296,6 +298,7 @@ class HUD:
         self.profile["resume"] = self.resume_field.get("1.0", "end").strip()
         self.profile["jobDescription"] = self.job_field.get("1.0", "end").strip()
         self.profile["agenticFacts"] = self.agentic_field.get("1.0", "end").strip()
+        self.profile["projects"] = self.projects_field.get("1.0", "end").strip()
         engine.save_profile(self.profile)
         self.transcript = []
         self.mock_i = 0

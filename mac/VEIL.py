@@ -65,7 +65,7 @@ from PyObjCTools import AppHelper
 import engine
 import listen
 
-W, H = 420, 580
+W, H = 420, 680
 CHROME = 44
 FOOTER = 52
 
@@ -353,21 +353,31 @@ class HUD:
         y -= 78
         self.body.addSubview_(label("Resume / playbook", NSMakeRect(20, y, 240, 16), 11, muted=True))
         self.body.addSubview_(pill("Import file", NSMakeRect(268, y - 4, 112, 24), a, "importResume:", "ghost"))
-        self.resume_field = multiline(NSMakeRect(20, 236, 380, y - 20 - 236), self.profile.get("resume", ""))
+        self.resume_field = multiline(NSMakeRect(20, 268, 380, y - 20 - 268), self.profile.get("resume", ""))
         self.body.addSubview_(self.resume_field["scroll"])
-        self.body.addSubview_(label("Job or meeting context", NSMakeRect(20, 216, 380, 16), 11, muted=True))
-        self.job_field = multiline(NSMakeRect(20, 164, 380, 50), self.profile.get("jobDescription", ""))
+        self.body.addSubview_(label("Job or meeting context", NSMakeRect(20, 248, 380, 16), 11, muted=True))
+        self.job_field = multiline(NSMakeRect(20, 210, 380, 36), self.profile.get("jobDescription", ""))
         self.body.addSubview_(self.job_field["scroll"])
         self.body.addSubview_(
             label(
-                "Agentic facts — years, Cursor CLI, Claude Code, Dynaskills, impact. He will not guess this.",
-                NSMakeRect(20, 144, 380, 16),
+                "Agentic facts — years, Cursor CLI, Claude Code, Dynaskills. Not a product.",
+                NSMakeRect(20, 190, 380, 16),
                 11,
                 muted=True,
             )
         )
-        self.agentic_field = multiline(NSMakeRect(20, 56, 380, 86), self.profile.get("agenticFacts", ""))
+        self.agentic_field = multiline(NSMakeRect(20, 136, 380, 52), self.profile.get("agenticFacts", ""))
         self.body.addSubview_(self.agentic_field["scroll"])
+        self.body.addSubview_(
+            label(
+                "Products / projects — name, what it is, architecture, alternative, how it scales.",
+                NSMakeRect(20, 116, 380, 16),
+                11,
+                muted=True,
+            )
+        )
+        self.projects_field = multiline(NSMakeRect(20, 54, 380, 60), self.profile.get("projects", ""))
+        self.body.addSubview_(self.projects_field["scroll"])
         self.body.addSubview_(pill("Launch overlay", NSMakeRect(20, 18, 160, 32), a, "launch:", "sage"))
         self.body.addSubview_(pill("Load briefing", NSMakeRect(190, 18, 120, 32), a, "loadBriefing:", "ghost"))
         self.body.addSubview_(pill("Settings", NSMakeRect(320, 18, 80, 32), a, "showSettings:", "ghost"))
@@ -598,6 +608,7 @@ class HUD:
         self.profile["resume"] = str(self.resume_field["tv"].string())
         self.profile["jobDescription"] = str(self.job_field["tv"].string())
         self.profile["agenticFacts"] = str(self.agentic_field["tv"].string())
+        self.profile["projects"] = str(self.projects_field["tv"].string())
         engine.save_profile(self.profile)
         self.transcript = []
         self.mock_i = 0
