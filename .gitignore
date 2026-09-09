@@ -9,3 +9,14 @@ node_modules/
 .grok/
 .vercel/
 AGENTS.md
+dist/
+build/
+*.dmg
+*.exe
+artifacts/
+screenshots/
+attachments/
+config.json
+profile.json
+sessions.json
+.pytest_cache/
