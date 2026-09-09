@@ -436,8 +436,11 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
             "Do not restart. Do not erase or restate that answer. Extend it.\n"
         )
     else:
-        length = "3 to 6 short spoken sentences. Periods, not semicolons."
+        length = "6 to 9 short spoken sentences. Periods, not semicolons. Principal depth: why and how, not a summary."
         extra_follow = ""
+        qlow = (question or "").lower()
+        if any(k in qlow for k in ("how are you feeling", "how do you feel", "feeling about the interview")):
+            length = "One or two honest sentences. This is a check-in, not a tech question. Do not recap the stack."
     system = (
         f"You write spoken lines for {name}, {role}.\n"
         f"{_voice(profile.get('mode', 'interview'), profile)}\n\n"
@@ -451,10 +454,10 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         "- Answer ONLY what they asked. If they asked how you'd design it, give the design. Stop.\n"
         "- Do NOT invent a personal example. Use the resume only. For Principal / agentic questions about experience or ownership, one resume-backed example is allowed.\n"
         "- Ground facts in the resume. NEVER invent a percent, dollar amount, headcount, or years that are not written in the resume. If there is no number, do not make one up.\n"
-        "- Agentic coding: name the real tools on the resume (Cursor, Claude Code, Copilot, etc.) and the workflow (how the team used it, review, tests, human sign-off). Do not substitute generic 'standards and unit-test gating' unless that is on the resume.\n"
-        "- HARD FACTS are for agentic / AI-tool questions only (years, Cursor, Claude Code, Dynaskills, team workflow). Dynaskills is skills/personas for agents, not a production product unless the resume says it is.\n"
+        "- Agentic coding: do not say you 'integrated the tools'. Give ONE workflow: the problem, the exact steps (who runs Cursor CLI / Claude Code / Dynaskills, what the agent is allowed to do, where tests and a human gate the diff), why that loop, and impact ONLY if HARD FACTS has a number. No boilerplate story.\n"
+        "- HARD FACTS are for agentic / AI-tool questions only (years, Cursor, Claude Code, Dynaskills, team workflow). Dynaskills is skills/personas for agents, not a production product unless PRODUCTS lists it as a shipped product.\n"
         "- If they asked years / which tools / impact: answer those three from HARD FACTS first, then the resume. If HARD FACTS lists Cursor or Claude Code, you have used them. Never say you have not used a tool that is in HARD FACTS.\n"
-        "- Architecture / scale / HA / cloud / 'a time you owned a decision': pick ONE system from PRODUCTS / PROJECTS first, then the resume. Why that shape, one alternative you actually considered, how it stays maintainable. Do not recast Cursor, Claude Code, or Dynaskills as a microservices platform unless PRODUCTS lists it as a shipped product.\n"
+        "- Architecture / scale / HA / cloud / 'a time you owned a decision': pick ONE system from PRODUCTS / PROJECTS first. Say why that shape, the alternative you dropped and why, and how it stays maintainable (what still runs in 2 years). Do not recast Cursor, Claude Code, or Dynaskills as a microservices platform unless PRODUCTS lists it as a shipped product.\n"
         "- Do not describe agentic coding as generating boilerplate or autocomplete. That is the answer this interviewer is screening out.\n"
         "- Name a real constraint only if it belongs in that design answer (limits, sharing, latency, cost).\n"
         "- If the question is vague, say what you'd need to know — do not pad with an anecdote.\n"
@@ -686,7 +689,7 @@ def stream_assist(profile: dict, transcript: str, question: str, kind: str, scre
         key,
         system,
         user,
-        420 if kind in ("screen", "draw") else 360,
+        520 if kind in ("screen", "draw", "answer") else 360,
         image_b64=image,
     )
 

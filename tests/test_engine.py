@@ -259,7 +259,7 @@ def test_agentic_facts_override_resume():
     assert "HARD FACTS" in user
     assert "Dynaskills" in user
     assert "Never say you have not used a tool that is in HARD FACTS" in system
-    assert "not a production product" in system.lower() or "not a production product" in (system + user).lower()
+    assert "shipped product" in system.lower() or "not a production product" in system.lower()
 
 
 def test_architecture_prompt_forbids_dynaskills_as_product():
@@ -281,7 +281,9 @@ def test_architecture_prompt_forbids_dynaskills_as_product():
     )
     assert "PRODUCTS / PROJECTS" in user
     assert "Payments API" in user
-    assert "PRODUCTS / PROJECTS first" in system
+    assert "PRODUCTS / PROJECTS first" in system or "pick ONE system from PRODUCTS" in system
+    assert "6 to 9" in system
+    assert "do not say you 'integrated the tools'" in system.lower() or "integrated the tools" in system
 
 
 def test_repair_asr_architecture_question():
