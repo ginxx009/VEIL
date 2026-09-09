@@ -74,10 +74,10 @@ def test_prompt_does_not_coach_draw_by_default():
     )
     assert "They did not ask you to draw" in system
     assert "They asked you to DRAW" not in system
-    assert "Do NOT add a personal example" in system
+    assert "Do NOT invent a personal example" in system
     blob = (system + user).lower()
     assert "draw.io" in blob  # the prohibition mentions it
-    assert "no extra example" in user.lower()
+    assert "match the question" in user.lower()
 
 
 def test_prompt_does_coach_draw_when_asked():
@@ -146,3 +146,38 @@ def test_extract_json():
 
 def test_extract_json_none():
     assert engine._extract_json("no json here") is None
+
+
+def test_followup_prompt_does_not_restart():
+    profile = {
+        "displayName": "Alex",
+        "role": "Principal Engineer",
+        "resume": "Shipped agentic review loops on Cursor.",
+        "jobDescription": "Principal Engineer hiring manager. Agentic coding.",
+        "mode": "interview",
+    }
+    prior = "them: how would you scale checkout?\nyou: I'd split read and write paths first."
+    system, user = engine._assist_prompts(profile, prior, "why?", "followup", "")
+    assert "FOLLOW-UP" in system
+    assert "Do not repeat" in system
+    assert "why?" in user
+    assert "you: I'd split" in user
+
+
+def test_principal_voice_from_job_brief():
+    profile = {
+        "displayName": "Alex",
+        "role": "Engineer",
+        "resume": "TypeScript.",
+        "jobDescription": "Principal Engineer hiring manager interview. Agentic coding is the highest priority.",
+        "mode": "interview",
+    }
+    voice = engine._voice("interview", profile)
+    assert "Principal" in voice
+    assert "agentic" in voice.lower()
+
+
+def test_load_briefing_principal():
+    text = engine.load_briefing("principal-engineer")
+    assert "agentic coding" in text.lower()
+    assert "Principal Engineer" in text

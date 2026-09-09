@@ -79,6 +79,12 @@ class HUD:
         self.hearing = ""
         self.listener = None
         self.pending_q = None
+        self.pending_kind = None
+        self.anchor_q = ""
+        self.anchor_a = ""
+        self.followups = []
+        self.follow_q = ""
+        self.draft_follow = ""
         self._build_shell()
         self.show_setup()
         self.root.after(400, lambda: set_stealth(self.root, True))
@@ -194,6 +200,7 @@ class HUD:
         foot = tk.Frame(self.body, bg=BG)
         foot.pack(fill="x", padx=20, pady=16)
         self._btn(foot, "Launch overlay", self.launch, "sage").pack(side="left")
+        self._btn(foot, "Load briefing", self.load_briefing).pack(side="left", padx=8)
         self._btn(foot, "Settings", self.show_settings).pack(side="left", padx=8)
 
     def show_settings(self):
@@ -261,7 +268,11 @@ class HUD:
         elif self.status == "error":
             body, color = self.error or "Could not generate an answer.", RED
         elif self.status == "thinking":
-            body, color = "Writing a speakable answer…", MUTED
+            held = self._compose_board()
+            if held:
+                body, color = held + "\n\nAdding…", TEXT
+            else:
+                body, color = "Writing a speakable answer…", MUTED
         elif self.listening and self.hearing:
             body, color = "Hearing…\n" + self.hearing, MUTED
         elif self.listening:
@@ -289,6 +300,11 @@ class HUD:
         self.result = None
         self.error = None
         self.started = time.time()
+        self.anchor_q = ""
+        self.anchor_a = ""
+        self.followups = []
+        self.follow_q = ""
+        self.draft_follow = ""
         self._stop_mic()
         self.show_live()
 
@@ -364,6 +380,7 @@ class HUD:
                 self.prompt.insert(0, cleaned)
             if self.status == "thinking":
                 self.pending_q = cleaned
+                self.pending_kind = "answer"
                 return
             self._run("answer", cleaned, "")
 
@@ -378,13 +395,36 @@ class HUD:
 
         self.ui(go)
 
+    def _compose_board(self) -> str:
+        parts = []
+        if self.anchor_q:
+            parts.append(self.anchor_q)
+        if self.anchor_a:
+            parts.append(self.anchor_a)
+        for fq, fa in self.followups:
+            parts.append(f"— {fq}\n{fa}")
+        if self.draft_follow:
+            parts.append(f"— {self.follow_q or 'follow-up'}\n{self.draft_follow}")
+        return "\n\n".join(p for p in parts if p).strip()
+
     def _run(self, kind, question, screen_text):
         if self.status == "thinking":
             self.pending_q = question
+            self.pending_kind = kind
             return
+        follow = kind == "followup"
+        if not follow:
+            self.anchor_q = question
+            self.anchor_a = ""
+            self.followups = []
+            self.follow_q = ""
+            self.draft_follow = ""
+            self.result = {"spoken": "", "points": [], "code": ""}
+        else:
+            self.follow_q = question
+            self.draft_follow = ""
         self.status = "thinking"
         self.error = None
-        self.result = {"spoken": "", "points": [], "code": ""}
         self._paint_answer()
         packed = "\n".join(self.transcript)
         profile = dict(self.profile)
@@ -395,32 +435,67 @@ class HUD:
                 for chunk in engine.stream_assist(profile, packed, question, kind, screen_text):
                     acc.append(chunk)
                     text = "".join(acc)
-                    self.ui(lambda t=text: self._stream_paint(t))
+                    self.ui(lambda t=text, f=follow: self._stream_paint(t, f))
+
                 def done():
+                    if follow:
+                        if self.draft_follow.strip():
+                            self.followups.append((self.follow_q, self.draft_follow.strip()))
+                            self.transcript.append(f"you: {self.draft_follow.strip()}")
+                        self.draft_follow = ""
+                    elif self.anchor_a.strip():
+                        self.transcript.append(f"you: {self.anchor_a.strip()}")
+                    self.result = {"spoken": self._compose_board(), "points": [], "code": ""}
                     self.status = "ready"
                     nxt = self.pending_q
+                    nxt_kind = self.pending_kind or "answer"
                     self.pending_q = None
+                    self.pending_kind = None
                     if nxt:
-                        self._run("answer", nxt, "")
+                        self._run(nxt_kind, nxt, "")
+
                 self.ui(done)
             except Exception as e:
                 msg = str(e)
+
                 def fail(m=msg):
                     self.status = "error"
                     self.error = m
                     self._paint_answer()
+
                 self.ui(fail)
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _stream_paint(self, text: str):
-        self.result = {"spoken": text, "points": [], "code": ""}
+    def _stream_paint(self, text: str, follow=False):
+        if follow:
+            self.draft_follow = text
+        else:
+            self.anchor_a = text
+        self.result = {"spoken": self._compose_board(), "points": [], "code": ""}
         self._paint_answer()
 
     def assist(self):
         if self.phase != "live":
             return
-        self._run("answer", self.prompt.get(), "")
+        q = self.prompt.get().strip()
+        if not q:
+            return
+        kind = "followup" if (self.anchor_a or "").strip() else "answer"
+        self._run(kind, q, "")
+
+    def load_briefing(self):
+        try:
+            text = engine.load_briefing("principal-engineer")
+        except Exception as e:
+            print(f"VEIL briefing: {e}", flush=True)
+            return
+        self.profile["jobDescription"] = text
+        if not (self.profile.get("role") or "").strip():
+            self.profile["role"] = "Principal Engineer"
+        engine.save_profile(self.profile)
+        if self.phase == "setup":
+            self.show_setup()
 
     def screen(self):
         if self.phase != "live":

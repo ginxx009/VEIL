@@ -136,6 +136,18 @@ def load_resume_file(path: str) -> str:
     return p.read_text(encoding="utf-8", errors="replace")[:24000]
 
 
+def load_briefing(name: str = "principal-engineer") -> str:
+    """Bundled interview brief for the Job field."""
+    if getattr(sys, "frozen", False):
+        root = Path(sys._MEIPASS)
+    else:
+        root = Path(__file__).resolve().parent
+    p = root / "playbooks" / f"{name}.md"
+    if not p.exists():
+        raise RuntimeError(f"No briefing named {name}.")
+    return p.read_text(encoding="utf-8", errors="replace")[:24000]
+
+
 def _read_json(path: Path, fallback):
     try:
         return json.loads(path.read_text())
@@ -270,6 +282,15 @@ def _voice(mode: str, profile: dict) -> str:
             "Do not volunteer a war story unless they asked for experience."
         )
     )
+    blob_job = f"{blob}\n{profile.get('jobDescription') or ''}".lower()
+    if any(k in blob_job for k in ("principal engineer", "agentic coding", "hiring manager")):
+        extra += (
+            " Principal / hiring-manager bar: they want what YOU built. "
+            "If they asked experience, architecture you owned, agentic coding, migration, "
+            "or leadership, use one resume-backed example (context, what you owned, why, outcome). "
+            "If they asked a design-only question, answer the design first. "
+            "Agentic coding means workflows and review loops, not 'I prompt Cursor'."
+        )
     return (
         f"You are this person in a live interview, role: {role or 'senior engineer'}.{extra} "
         "Sound like you talking, not like generated text."
@@ -297,7 +318,8 @@ def _is_draw_question(question: str) -> bool:
 def _assist_prompts(profile, transcript, question, kind, screen_text):
     name = profile.get("displayName") or "the candidate"
     role = profile.get("role") or "senior engineer"
-    drawing = kind == "draw" or _is_draw_question(question)
+    drawing = kind in ("draw", "screen") or _is_draw_question(question)
+    follow = kind == "followup"
     draw_rule = (
         "They asked you to DRAW. Talk the next boxes to put on the canvas, in order, as speech. "
         "Name the arrow. One tradeoff. Do not dump a whole architecture essay."
@@ -307,16 +329,29 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
             "They did not ask you to draw. Answer the question out loud like a senior in the room."
         )
     )
+    if follow:
+        length = (
+            "2 to 4 short spoken sentences. Do not repeat the previous answer. "
+            "Add only the why / the missing piece they just asked."
+        )
+        extra_follow = (
+            "- This is a FOLLOW-UP on the last answer already on screen. "
+            "Do not restart. Do not erase or restate that answer. Extend it.\n"
+        )
+    else:
+        length = "3 to 6 short spoken sentences. Periods, not semicolons."
+        extra_follow = ""
     system = (
         f"You write spoken lines for {name}, {role}.\n"
         f"{_voice(profile.get('mode', 'interview'), profile)}\n\n"
         "They will say this out loud in the next 15 seconds. Speech, not an essay.\n\n"
         "Hard rules:\n"
         f"- First person only. You are {name}, a {role}.\n"
-        "- 3 to 6 short spoken sentences. Periods, not semicolons.\n"
+        f"- {length}\n"
+        f"{extra_follow}"
         "- Contractions. Senior tone: calm, specific, a little blunt.\n"
         "- Answer ONLY what they asked. If they asked how you'd design it, give the design. Stop.\n"
-        "- Do NOT add a personal example, production incident, or 'in my last role' story unless they asked for experience (tell me about a time, walk me through a project, what have you done).\n"
+        "- Do NOT invent a personal example. Use the resume only. For Principal / agentic questions about experience or ownership, one resume-backed example is allowed.\n"
         "- Ground facts in the resume. Never invent a company, outage, metric, or story.\n"
         "- Name a real constraint only if it belongs in that design answer (limits, sharing, latency, cost).\n"
         "- If the question is vague, say what you'd need to know — do not pad with an anecdote.\n"
@@ -328,13 +363,17 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
     )
     user = (
         f"They're asking:\n{_clip(question, 700) or '(latest in transcript)'}\n\n"
-        "Resume (facts only — use a story from here SOLELY if they asked about your experience):\n"
+        "Resume (facts only):\n"
         f"{_clip(profile.get('resume', ''), 5000) or '(none)'}\n\n"
         "Role / job they're interviewing for:\n"
-        f"{_clip(profile.get('jobDescription', ''), 1200) or '(none)'}\n\n"
-        "Recent conversation:\n"
-        f"{_clip(transcript, 1500) or '(none)'}\n\n"
-        f"Reply with only the words {name} should say next. Match the question. No extra example."
+        f"{_clip(profile.get('jobDescription', ''), 8000) or '(none)'}\n\n"
+        "Recent conversation (includes your last spoken answer as 'you:'):\n"
+        f"{_clip(transcript, 2500) or '(none)'}\n\n"
+        + (
+            f"Follow-up only. Do not repeat the last 'you:' block. {name} should add the why."
+            if follow
+            else f"Reply with only the words {name} should say next. Match the question."
+        )
     )
     return system, user
 

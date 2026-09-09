@@ -13,7 +13,7 @@ a = Analysis(
         (str(SPECDIR / "engine.py"), "."),
         (str(SPECDIR / "listen.py"), "."),
         (str(ROOT / "icons" / "veil.png"), "icons"),
-        (str(SPECDIR / "Info.plist"), "."),
+        (str(SPECDIR / "playbooks"), "playbooks"),
     ],
     hiddenimports=[
         "engine",
