@@ -301,6 +301,28 @@ def test_repair_asr_tsekmo():
     assert "tsekmo" in engine.repair_asr("walk me through Checkmo").lower()
 
 
+def test_repair_asr_etl_not_eto():
+    raw = "experience with designing data pipelines handling ETO processes or processing large data sets"
+    low = engine.repair_asr(raw).lower()
+    assert "etl" in low
+    assert "eto processes" not in low
+
+
+def test_data_pipeline_prompt_does_not_disqualify():
+    profile = {
+        "displayName": "Dexter",
+        "role": "Principal Engineer",
+        "resume": "Node RDS.",
+        "projects": "TSEKMO EventBridge S3 RDS Lambda. No Spark warehouse.",
+        "jobDescription": "Principal Engineer",
+        "mode": "interview",
+    }
+    system, _ = engine._assist_prompts(profile, "", "tell me about ETL pipelines", "answer", "")
+    assert "Do NOT open with" in system
+    assert "ETO" in system
+    assert "PHP-to-Node" in system
+
+
 def test_leadership_facts_in_prompt():
     profile = {
         "displayName": "Dexter",

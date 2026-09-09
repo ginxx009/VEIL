@@ -346,6 +346,10 @@ JARGON = (
     "JOSIE",
     "Dalakuha",
     "AlbumKo",
+    "ETL",
+    "ELT",
+    "data pipeline",
+    "EventBridge",
 )
 
 
@@ -406,6 +410,13 @@ _ASR_FIXES = (
     ("check mo", "TSEKMO"),
     ("tsek mo", "TSEKMO"),
     ("czech mo", "TSEKMO"),
+    ("eto processes", "ETL processes"),
+    ("eto process", "ETL process"),
+    ("handling eto", "handling ETL"),
+    ("with eto", "with ETL"),
+    ("eto or processing", "ETL or processing"),
+    ("e t l", "ETL"),
+    ("e t o", "ETL"),
 )
 
 
@@ -458,7 +469,7 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         f"- First person only. You are {name}, a {role}.\n"
         f"- {length}\n"
         f"{extra_follow}"
-        "- The question is live speech-to-text and will be messy. Infer the intended interview question from the job brief. Common slips: agency→agentic, cursor, copilot, next js, type script.\n"
+        "- The question is live speech-to-text and will be messy. Infer the intended interview question from the job brief. Common slips: agency→agentic, cursor, copilot, next js, type script, ETO→ETL, Checkmo→TSEKMO.\n"
         "- Contractions. Senior tone: calm, specific, a little blunt.\n"
         "- Answer ONLY what they asked. If they asked how you'd design it, give the design. Stop.\n"
         "- Do NOT invent a personal example. Use the resume only. For Principal / agentic questions about experience or ownership, one resume-backed example is allowed.\n"
@@ -468,6 +479,7 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         "- If they asked years / which tools / impact: answer those three from HARD FACTS first, then the resume. If HARD FACTS lists Cursor or Claude Code, you have used them. Never say you have not used a tool that is in HARD FACTS.\n"
         "- Architecture / scale / HA / cloud / 'a time you owned a decision': pick ONE system from PRODUCTS / PROJECTS first (TSEKMO if it fits). Always name the alternative you dropped and why. Tie the choice to a business outcome from PRODUCTS or LEADERSHIP only — cost, uptime, shipping speed — never a made-up percent.\n"
         "- Leadership / culture / mentoring / influence: use LEADERSHIP facts. How you got other engineers to adopt a standard, not that you 'communicate well'.\n"
+        "- ETL / ELT / data pipelines / large datasets: ETO in the transcript means ETL. Do NOT open with 'I don't have experience'. Map to PRODUCTS: TSEKMO EventBridge + S3 + RDS + Lambda is a data path; payment-gateway moves money data; say what you owned. One clause at the end if you have not run a warehouse/Spark job. Never invent a PHP-to-Node data migration unless PRODUCTS or the resume says it.\n"
         "- Do not describe agentic coding as generating boilerplate or autocomplete. That is the answer this interviewer is screening out.\n"
         "- Name a real constraint only if it belongs in that design answer (limits, sharing, latency, cost).\n"
         "- If the question is vague, say what you'd need to know — do not pad with an anecdote.\n"
