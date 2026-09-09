@@ -38,3 +38,12 @@ GitHub → **Actions** → **Release installers** → Run workflow (or push a `v
 - `VEIL-windows` → `VEIL.exe`
 
 Icon is in [icons/](icons/).
+
+## Tests
+
+```bash
+python -m pip install pytest pypdf
+python -m pytest tests -q
+```
+
+CI runs this on every pull request. A failing `tests` check cannot be merged.

@@ -14,6 +14,6 @@ Fork, branch, open a pull request. **Do not push to `main`.**
 1. Fork [ginxx009/VEIL](https://github.com/ginxx009/VEIL)
 2. Branch from `main`
 3. Open a PR against `main`
-4. Wait for review. Maintainers merge.
+5. `python -m pytest tests -q` must stay green. GitHub Actions runs this on every PR; a red `tests` check blocks merge.
 
 Do not include API keys, resumes, or anything from `~/Library/Application Support/VEIL/` or `%APPDATA%\VEIL`.
