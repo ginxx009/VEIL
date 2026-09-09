@@ -315,6 +315,56 @@ def _is_draw_question(question: str) -> bool:
     return any(n in q for n in needles)
 
 
+JARGON = (
+    "agentic",
+    "agentic coding",
+    "Claude Code",
+    "Cursor",
+    "Copilot",
+    "GitHub Copilot",
+    "TypeScript",
+    "JavaScript",
+    "Next.js",
+    "React",
+    "Python",
+    "PHP",
+    "Laravel",
+    "AWS",
+    "GCP",
+    "Azure",
+    "CI/CD",
+    "high availability",
+    "Principal Engineer",
+)
+
+
+def speech_hints(profile: dict | None = None) -> list[str]:
+    """Words for macOS Speech so jargon like 'agentic' doesn't become 'agency'."""
+    seen = []
+    for w in JARGON:
+        if w.lower() not in {x.lower() for x in seen}:
+            seen.append(w)
+    blob = ""
+    if profile:
+        blob = f"{profile.get('resume') or ''} {profile.get('jobDescription') or ''} {profile.get('role') or ''}"
+    for token in blob.replace("/", " ").replace(",", " ").split():
+        t = token.strip(".-()[]")
+        if len(t) < 4 or not any(c.isalpha() for c in t):
+            continue
+        if t.lower() not in {x.lower() for x in seen}:
+            seen.append(t)
+        if len(seen) >= 80:
+            break
+    return seen
+
+
+def looks_like_utterance(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t or t in {"me too", "yeah", "yes", "okay", "ok", "right", "uh huh", "mm", "hmm"}:
+        return False
+    return len(t.split()) >= 5
+
+
 def _assist_prompts(profile, transcript, question, kind, screen_text):
     name = profile.get("displayName") or "the candidate"
     role = profile.get("role") or "senior engineer"
@@ -349,10 +399,12 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         f"- First person only. You are {name}, a {role}.\n"
         f"- {length}\n"
         f"{extra_follow}"
+        "- The question is live speech-to-text and will be messy. Infer the intended interview question from the job brief. Common slips: agency→agentic, cursor, copilot, next js, type script.\n"
         "- Contractions. Senior tone: calm, specific, a little blunt.\n"
         "- Answer ONLY what they asked. If they asked how you'd design it, give the design. Stop.\n"
         "- Do NOT invent a personal example. Use the resume only. For Principal / agentic questions about experience or ownership, one resume-backed example is allowed.\n"
-        "- Ground facts in the resume. Never invent a company, outage, metric, or story.\n"
+        "- Ground facts in the resume. NEVER invent a percent, dollar amount, headcount, or years that are not written in the resume. If there is no number, do not make one up.\n"
+        "- Agentic coding: name the real tools on the resume (Cursor, Claude Code, Copilot, etc.) and the workflow (how the team used it, review, tests, human sign-off). Do not substitute generic 'standards and unit-test gating' unless that is on the resume.\n"
         "- Name a real constraint only if it belongs in that design answer (limits, sharing, latency, cost).\n"
         "- If the question is vague, say what you'd need to know — do not pad with an anecdote.\n"
         "- Do not start with Great question, Absolutely, Certainly, As a senior, I would say.\n"

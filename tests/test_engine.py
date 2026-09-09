@@ -181,3 +181,41 @@ def test_load_briefing_principal():
     text = engine.load_briefing("principal-engineer")
     assert "agentic coding" in text.lower()
     assert "Principal Engineer" in text
+
+
+def test_speech_hints_include_agentic():
+    hints = engine.speech_hints(
+        {
+            "resume": "Used Cursor and Claude Code for agentic loops.",
+            "jobDescription": "Principal Engineer hiring manager",
+            "role": "Principal Engineer",
+        }
+    )
+    joined = " ".join(hints).lower()
+    assert "agentic" in joined
+    assert "cursor" in joined
+
+
+def test_looks_like_utterance():
+    assert engine.looks_like_utterance("me too") is False
+    assert engine.looks_like_utterance("ok") is False
+    assert (
+        engine.looks_like_utterance(
+            "how you introduced agentic coding practices across your team"
+        )
+        is True
+    )
+
+
+def test_prompt_forbids_invented_metrics():
+    profile = {
+        "displayName": "Alex",
+        "role": "Principal Engineer",
+        "resume": "Cursor workflows.",
+        "jobDescription": "Principal Engineer. Agentic coding.",
+        "mode": "interview",
+    }
+    system, _ = engine._assist_prompts(profile, "", "how did you scale agentic coding", "answer", "")
+    assert "NEVER invent a percent" in system
+    assert "speech-to-text" in system
+    assert "Agentic coding" in system

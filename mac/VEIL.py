@@ -611,7 +611,12 @@ class HUD:
             return
         self.listening = True
         self.hearing = ""
-        self.listener = listen.Listener(self._heard_partial, self._heard_final, self._heard_error)
+        self.listener = listen.Listener(
+            self._heard_partial,
+            self._heard_final,
+            self._heard_error,
+            hints=engine.speech_hints(self.profile),
+        )
         self.show_live()
         self.listener.start()
 
@@ -637,7 +642,10 @@ class HUD:
     def _heard_final(self, text: str):
         cleaned = text.strip()
         self.hearing = ""
-        if len(cleaned) < 4:
+        if not engine.looks_like_utterance(cleaned):
+            print(f"VEIL skip (too short / filler): {cleaned}", flush=True)
+            if hasattr(self, "prompt"):
+                self.prompt.setStringValue_(cleaned)
             return
         print(f"VEIL assist on: {cleaned}", flush=True)
         self.transcript.append(f"them: {cleaned}")
