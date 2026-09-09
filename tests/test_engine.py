@@ -313,14 +313,16 @@ def test_data_pipeline_prompt_does_not_disqualify():
         "displayName": "Dexter",
         "role": "Principal Engineer",
         "resume": "Node RDS.",
-        "projects": "TSEKMO EventBridge S3 RDS Lambda. No Spark warehouse.",
+        "projects": "TSEKMO EventBridge S3 RDS Lambda.",
+        "dataFacts": "TSEKMO ETL: EventBridge extract, Lambda transform, RDS load. PHP to Node cutover with characterization tests.",
         "jobDescription": "Principal Engineer",
         "mode": "interview",
     }
-    system, _ = engine._assist_prompts(profile, "", "tell me about ETL pipelines", "answer", "")
+    system, user = engine._assist_prompts(profile, "", "tell me about ETL pipelines", "answer", "")
     assert "Do NOT open with" in system
-    assert "ETO" in system
-    assert "PHP-to-Node" in system
+    assert "DATA / ETL" in user
+    assert "PHP to Node" in user
+    assert "PHP-to-Node is allowed" in system
 
 
 def test_leadership_facts_in_prompt():

@@ -42,6 +42,7 @@ DEFAULT_PROFILE = {
     "agenticFacts": "",
     "projects": "",
     "leadership": "",
+    "dataFacts": "",
 }
 
 MODE_COPY = {
@@ -252,7 +253,7 @@ def _extract_json(text: str):
 
 def _voice(mode: str, profile: dict) -> str:
     role = (profile.get("role") or "").strip()
-    blob = f"{role}\n{profile.get('resume') or ''}\n{profile.get('jobDescription') or ''}\n{profile.get('agenticFacts') or ''}\n{profile.get('projects') or ''}\n{profile.get('leadership') or ''}".lower()
+    blob = f"{role}\n{profile.get('resume') or ''}\n{profile.get('jobDescription') or ''}\n{profile.get('agenticFacts') or ''}\n{profile.get('projects') or ''}\n{profile.get('leadership') or ''}\n{profile.get('dataFacts') or ''}".lower()
     salesforce = any(
         k in blob
         for k in (
@@ -361,7 +362,7 @@ def speech_hints(profile: dict | None = None) -> list[str]:
             seen.append(w)
     blob = ""
     if profile:
-        blob = f"{profile.get('resume') or ''} {profile.get('jobDescription') or ''} {profile.get('role') or ''} {profile.get('agenticFacts') or ''} {profile.get('projects') or ''} {profile.get('leadership') or ''}"
+        blob = f"{profile.get('resume') or ''} {profile.get('jobDescription') or ''} {profile.get('role') or ''} {profile.get('agenticFacts') or ''} {profile.get('projects') or ''} {profile.get('leadership') or ''} {profile.get('dataFacts') or ''}"
     for token in blob.replace("/", " ").replace(",", " ").split():
         t = token.strip(".-()[]")
         if len(t) < 4 or not any(c.isalpha() for c in t):
@@ -479,7 +480,7 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         "- If they asked years / which tools / impact: answer those three from HARD FACTS first, then the resume. If HARD FACTS lists Cursor or Claude Code, you have used them. Never say you have not used a tool that is in HARD FACTS.\n"
         "- Architecture / scale / HA / cloud / 'a time you owned a decision': pick ONE system from PRODUCTS / PROJECTS first (TSEKMO if it fits). Always name the alternative you dropped and why. Tie the choice to a business outcome from PRODUCTS or LEADERSHIP only — cost, uptime, shipping speed — never a made-up percent.\n"
         "- Leadership / culture / mentoring / influence: use LEADERSHIP facts. How you got other engineers to adopt a standard, not that you 'communicate well'.\n"
-        "- ETL / ELT / data pipelines / large datasets: ETO in the transcript means ETL. Do NOT open with 'I don't have experience'. Map to PRODUCTS: TSEKMO EventBridge + S3 + RDS + Lambda is a data path; payment-gateway moves money data; say what you owned. One clause at the end if you have not run a warehouse/Spark job. Never invent a PHP-to-Node data migration unless PRODUCTS or the resume says it.\n"
+        "- ETL / ELT / data pipelines / large datasets / PHP-to-Node / cutover: ETO in the transcript means ETL. Use DATA / ETL facts first. Do NOT open with 'I don't have experience'. Lead with the pipeline you owned (EventBridge, S3, RDS, Lambda, payment-gateway, PHP→Node if DATA lists it). One clause at the end only if DATA says no Spark/warehouse. Never invent a warehouse. PHP-to-Node is allowed when DATA or PRODUCTS includes that cutover.\n"
         "- Do not describe agentic coding as generating boilerplate or autocomplete. That is the answer this interviewer is screening out.\n"
         "- Name a real constraint only if it belongs in that design answer (limits, sharing, latency, cost).\n"
         "- If the question is vague, say what you'd need to know — do not pad with an anecdote.\n"
@@ -496,6 +497,8 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         f"{_clip(profile.get('projects', ''), 4000) or '(none — then use the resume only; do not invent a platform)'}\n\n"
         "LEADERSHIP — culture change, mentoring, how a standard actually spread. Use this when they ask how you lead without a title:\n"
         f"{_clip(profile.get('leadership', ''), 2000) or '(none — do not invent a mentoring program)'}\n\n"
+        "DATA / ETL — pipelines, EventBridge, S3, RDS, large sets, PHP→Node cutover. Use this when they ask ETL/ETO/data infrastructure:\n"
+        f"{_clip(profile.get('dataFacts', ''), 3000) or '(none — map to PRODUCTS EventBridge/S3/RDS; do not invent Spark)'}\n\n"
         f"They're asking:\n{_clip(question, 700) or '(latest in transcript)'}\n\n"
         "Resume (facts only):\n"
         f"{_clip(profile.get('resume', ''), 5000) or '(none)'}\n\n"
