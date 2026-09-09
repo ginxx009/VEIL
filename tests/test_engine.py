@@ -259,3 +259,35 @@ def test_agentic_facts_override_resume():
     assert "HARD FACTS" in user
     assert "Dynaskills" in user
     assert "Never say you have not used a tool that is in HARD FACTS" in system
+    assert "not a production product" in system.lower() or "not a production product" in (system + user).lower()
+
+
+def test_architecture_prompt_forbids_dynaskills_as_product():
+    profile = {
+        "displayName": "Dexter",
+        "role": "Principal Engineer",
+        "resume": "Designed a multi-AZ payments API on AWS.",
+        "agenticFacts": "Cursor CLI, Claude Code, Dynaskills personas.",
+        "jobDescription": "Principal Engineer",
+        "mode": "interview",
+    }
+    system, _ = engine._assist_prompts(
+        profile,
+        "",
+        "tell me about a time you independently owned an architectural decision for a product",
+        "answer",
+        "",
+    )
+    assert "Do not recast" in system
+    assert "resume" in system.lower()
+
+
+def test_repair_asr_architecture_question():
+    raw = (
+        "independently owned and architectural decision for prodded "
+        "how you insured with scalable and maintainable in a long run"
+    )
+    low = engine.repair_asr(raw).lower()
+    assert "a product" in low
+    assert "owned an architectural" in low
+    assert "ensured it was scalable" in low

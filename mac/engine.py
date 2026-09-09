@@ -388,6 +388,12 @@ _ASR_FIXES = (
     ("github co pilot", "GitHub Copilot"),
     ("clod code", "Claude Code"),
     ("clawed code", "Claude Code"),
+    ("prodded", "a product"),
+    ("for prodded", "for a product"),
+    ("owned and architectural", "owned an architectural"),
+    ("insured with scalable", "ensured it was scalable"),
+    ("insured it was", "ensured it was"),
+    ("maintainable in a long run", "maintainable in the long run"),
     ("next js", "Next.js"),
     ("type script", "TypeScript"),
 )
@@ -445,7 +451,9 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         "- Do NOT invent a personal example. Use the resume only. For Principal / agentic questions about experience or ownership, one resume-backed example is allowed.\n"
         "- Ground facts in the resume. NEVER invent a percent, dollar amount, headcount, or years that are not written in the resume. If there is no number, do not make one up.\n"
         "- Agentic coding: name the real tools on the resume (Cursor, Claude Code, Copilot, etc.) and the workflow (how the team used it, review, tests, human sign-off). Do not substitute generic 'standards and unit-test gating' unless that is on the resume.\n"
+        "- HARD FACTS are for agentic / AI-tool questions only (years, Cursor, Claude Code, Dynaskills, team workflow). Dynaskills is skills/personas for agents, not a production product unless the resume says it is.\n"
         "- If they asked years / which tools / impact: answer those three from HARD FACTS first, then the resume. If HARD FACTS lists Cursor or Claude Code, you have used them. Never say you have not used a tool that is in HARD FACTS.\n"
+        "- Architecture / scale / HA / cloud / 'a time you owned a decision': pick ONE system from the resume. Why that shape, one alternative you actually considered, how it stays maintainable. Do not recast Cursor, Claude Code, or Dynaskills as a microservices platform, Node app, or high-traffic product.\n"
         "- Do not describe agentic coding as generating boilerplate or autocomplete. That is the answer this interviewer is screening out.\n"
         "- Name a real constraint only if it belongs in that design answer (limits, sharing, latency, cost).\n"
         "- If the question is vague, say what you'd need to know — do not pad with an anecdote.\n"
