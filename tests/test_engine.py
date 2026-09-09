@@ -295,3 +295,24 @@ def test_repair_asr_architecture_question():
     assert "a product" in low
     assert "owned an architectural" in low
     assert "ensured it was scalable" in low
+
+
+def test_repair_asr_tsekmo():
+    assert "tsekmo" in engine.repair_asr("walk me through Checkmo").lower()
+
+
+def test_leadership_facts_in_prompt():
+    profile = {
+        "displayName": "Dexter",
+        "role": "Principal Engineer",
+        "resume": "AWS.",
+        "agenticFacts": "Cursor CLI.",
+        "projects": "TSEKMO Lambda plus EC2 sockets. Dropped one-box EC2.",
+        "leadership": "Paired juniors on Dynaskills so the same PR gate stuck.",
+        "jobDescription": "Principal Engineer",
+        "mode": "interview",
+    }
+    system, user = engine._assist_prompts(profile, "", "how do you mentor engineers", "answer", "")
+    assert "LEADERSHIP" in user
+    assert "Dynaskills so the same PR gate stuck" in user
+    assert "mentoring" in system.lower()

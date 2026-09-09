@@ -41,6 +41,7 @@ DEFAULT_PROFILE = {
     "mode": "interview",
     "agenticFacts": "",
     "projects": "",
+    "leadership": "",
 }
 
 MODE_COPY = {
@@ -251,7 +252,7 @@ def _extract_json(text: str):
 
 def _voice(mode: str, profile: dict) -> str:
     role = (profile.get("role") or "").strip()
-    blob = f"{role}\n{profile.get('resume') or ''}\n{profile.get('jobDescription') or ''}\n{profile.get('agenticFacts') or ''}\n{profile.get('projects') or ''}".lower()
+    blob = f"{role}\n{profile.get('resume') or ''}\n{profile.get('jobDescription') or ''}\n{profile.get('agenticFacts') or ''}\n{profile.get('projects') or ''}\n{profile.get('leadership') or ''}".lower()
     salesforce = any(
         k in blob
         for k in (
@@ -340,7 +341,11 @@ JARGON = (
     "Azure",
     "CI/CD",
     "high availability",
-    "Principal Engineer",
+    "TSEKMO",
+    "Checkmo",
+    "JOSIE",
+    "Dalakuha",
+    "AlbumKo",
 )
 
 
@@ -352,7 +357,7 @@ def speech_hints(profile: dict | None = None) -> list[str]:
             seen.append(w)
     blob = ""
     if profile:
-        blob = f"{profile.get('resume') or ''} {profile.get('jobDescription') or ''} {profile.get('role') or ''} {profile.get('agenticFacts') or ''} {profile.get('projects') or ''}"
+        blob = f"{profile.get('resume') or ''} {profile.get('jobDescription') or ''} {profile.get('role') or ''} {profile.get('agenticFacts') or ''} {profile.get('projects') or ''} {profile.get('leadership') or ''}"
     for token in blob.replace("/", " ").replace(",", " ").split():
         t = token.strip(".-()[]")
         if len(t) < 4 or not any(c.isalpha() for c in t):
@@ -397,6 +402,10 @@ _ASR_FIXES = (
     ("maintainable in a long run", "maintainable in the long run"),
     ("next js", "Next.js"),
     ("type script", "TypeScript"),
+    ("checkmo", "TSEKMO"),
+    ("check mo", "TSEKMO"),
+    ("tsek mo", "TSEKMO"),
+    ("czech mo", "TSEKMO"),
 )
 
 
@@ -457,7 +466,8 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         "- Agentic coding: do not say you 'integrated the tools'. Give ONE workflow: the problem, the exact steps (who runs Cursor CLI / Claude Code / Dynaskills, what the agent is allowed to do, where tests and a human gate the diff), why that loop, and impact ONLY if HARD FACTS has a number. No boilerplate story.\n"
         "- HARD FACTS are for agentic / AI-tool questions only (years, Cursor, Claude Code, Dynaskills, team workflow). Dynaskills is skills/personas for agents, not a production product unless PRODUCTS lists it as a shipped product.\n"
         "- If they asked years / which tools / impact: answer those three from HARD FACTS first, then the resume. If HARD FACTS lists Cursor or Claude Code, you have used them. Never say you have not used a tool that is in HARD FACTS.\n"
-        "- Architecture / scale / HA / cloud / 'a time you owned a decision': pick ONE system from PRODUCTS / PROJECTS first. Say why that shape, the alternative you dropped and why, and how it stays maintainable (what still runs in 2 years). Do not recast Cursor, Claude Code, or Dynaskills as a microservices platform unless PRODUCTS lists it as a shipped product.\n"
+        "- Architecture / scale / HA / cloud / 'a time you owned a decision': pick ONE system from PRODUCTS / PROJECTS first (TSEKMO if it fits). Always name the alternative you dropped and why. Tie the choice to a business outcome from PRODUCTS or LEADERSHIP only — cost, uptime, shipping speed — never a made-up percent.\n"
+        "- Leadership / culture / mentoring / influence: use LEADERSHIP facts. How you got other engineers to adopt a standard, not that you 'communicate well'.\n"
         "- Do not describe agentic coding as generating boilerplate or autocomplete. That is the answer this interviewer is screening out.\n"
         "- Name a real constraint only if it belongs in that design answer (limits, sharing, latency, cost).\n"
         "- If the question is vague, say what you'd need to know — do not pad with an anecdote.\n"
@@ -472,6 +482,8 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         f"{_clip(profile.get('agenticFacts', ''), 2000) or '(none — then you may not claim Cursor, Claude Code, or Copilot years)'}\n\n"
         "PRODUCTS / PROJECTS you built or are building — architecture and ownership answers MUST come from here. Do not invent a product:\n"
         f"{_clip(profile.get('projects', ''), 4000) or '(none — then use the resume only; do not invent a platform)'}\n\n"
+        "LEADERSHIP — culture change, mentoring, how a standard actually spread. Use this when they ask how you lead without a title:\n"
+        f"{_clip(profile.get('leadership', ''), 2000) or '(none — do not invent a mentoring program)'}\n\n"
         f"They're asking:\n{_clip(question, 700) or '(latest in transcript)'}\n\n"
         "Resume (facts only):\n"
         f"{_clip(profile.get('resume', ''), 5000) or '(none)'}\n\n"
