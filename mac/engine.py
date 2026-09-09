@@ -39,6 +39,7 @@ DEFAULT_PROFILE = {
         "Interviews include a coding round and a system-design conversation."
     ),
     "mode": "interview",
+    "agenticFacts": "",
 }
 
 MODE_COPY = {
@@ -249,7 +250,7 @@ def _extract_json(text: str):
 
 def _voice(mode: str, profile: dict) -> str:
     role = (profile.get("role") or "").strip()
-    blob = f"{role}\n{profile.get('resume') or ''}\n{profile.get('jobDescription') or ''}".lower()
+    blob = f"{role}\n{profile.get('resume') or ''}\n{profile.get('jobDescription') or ''}\n{profile.get('agenticFacts') or ''}".lower()
     salesforce = any(
         k in blob
         for k in (
@@ -319,7 +320,11 @@ JARGON = (
     "agentic",
     "agentic coding",
     "Claude Code",
-    "Cursor",
+    "Cursor CLI",
+    "Dynaskills",
+    "dynaskills",
+    "Cursor CLI",
+    "Dynaskills",
     "Copilot",
     "GitHub Copilot",
     "TypeScript",
@@ -346,7 +351,7 @@ def speech_hints(profile: dict | None = None) -> list[str]:
             seen.append(w)
     blob = ""
     if profile:
-        blob = f"{profile.get('resume') or ''} {profile.get('jobDescription') or ''} {profile.get('role') or ''}"
+        blob = f"{profile.get('resume') or ''} {profile.get('jobDescription') or ''} {profile.get('role') or ''} {profile.get('agenticFacts') or ''}"
     for token in blob.replace("/", " ").replace(",", " ").split():
         t = token.strip(".-()[]")
         if len(t) < 4 or not any(c.isalpha() for c in t):
@@ -371,6 +376,10 @@ _ASR_FIXES = (
     ("agency coating", "agentic coding"),
     ("agent see coding", "agentic coding"),
     ("a gentic coding", "agentic coding"),
+    ("agents including", "agentic coding"),
+    ("agent including", "agentic coding"),
+    ("older cars are", "Cursor"),
+    ("older cars", "Cursor"),
     ("sue's like hers are", "tools like Cursor"),
     ("sues like hers are", "tools like Cursor"),
     ("tools like hers are", "tools like Cursor"),
@@ -436,7 +445,7 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         "- Do NOT invent a personal example. Use the resume only. For Principal / agentic questions about experience or ownership, one resume-backed example is allowed.\n"
         "- Ground facts in the resume. NEVER invent a percent, dollar amount, headcount, or years that are not written in the resume. If there is no number, do not make one up.\n"
         "- Agentic coding: name the real tools on the resume (Cursor, Claude Code, Copilot, etc.) and the workflow (how the team used it, review, tests, human sign-off). Do not substitute generic 'standards and unit-test gating' unless that is on the resume.\n"
-        "- If they asked years / which tools / impact: answer those three from the resume. If a named tool is not on the resume, say you have not used that one — do not invent years on Copilot or Cursor.\n"
+        "- If they asked years / which tools / impact: answer those three from HARD FACTS first, then the resume. If HARD FACTS lists Cursor or Claude Code, you have used them. Never say you have not used a tool that is in HARD FACTS.\n"
         "- Do not describe agentic coding as generating boilerplate or autocomplete. That is the answer this interviewer is screening out.\n"
         "- Name a real constraint only if it belongs in that design answer (limits, sharing, latency, cost).\n"
         "- If the question is vague, say what you'd need to know — do not pad with an anecdote.\n"
@@ -447,6 +456,8 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         "- Coding: the approach in one breath, then a tiny snippet, no tutorial."
     )
     user = (
+        "HARD FACTS — this is true. Do not contradict it. If empty, do not invent tools or years:\n"
+        f"{_clip(profile.get('agenticFacts', ''), 2000) or '(none — then you may not claim Cursor, Claude Code, or Copilot years)'}\n\n"
         f"They're asking:\n{_clip(question, 700) or '(latest in transcript)'}\n\n"
         "Resume (facts only):\n"
         f"{_clip(profile.get('resume', ''), 5000) or '(none)'}\n\n"

@@ -353,11 +353,21 @@ class HUD:
         y -= 78
         self.body.addSubview_(label("Resume / playbook", NSMakeRect(20, y, 240, 16), 11, muted=True))
         self.body.addSubview_(pill("Import file", NSMakeRect(268, y - 4, 112, 24), a, "importResume:", "ghost"))
-        self.resume_field = multiline(NSMakeRect(20, 168, 380, y - 20 - 168), self.profile.get("resume", ""))
+        self.resume_field = multiline(NSMakeRect(20, 236, 380, y - 20 - 236), self.profile.get("resume", ""))
         self.body.addSubview_(self.resume_field["scroll"])
-        self.body.addSubview_(label("Job or meeting context", NSMakeRect(20, 148, 380, 16), 11, muted=True))
-        self.job_field = multiline(NSMakeRect(20, 64, 380, 80), self.profile.get("jobDescription", ""))
+        self.body.addSubview_(label("Job or meeting context", NSMakeRect(20, 216, 380, 16), 11, muted=True))
+        self.job_field = multiline(NSMakeRect(20, 164, 380, 50), self.profile.get("jobDescription", ""))
         self.body.addSubview_(self.job_field["scroll"])
+        self.body.addSubview_(
+            label(
+                "Agentic facts — years, Cursor CLI, Claude Code, Dynaskills, impact. He will not guess this.",
+                NSMakeRect(20, 144, 380, 16),
+                11,
+                muted=True,
+            )
+        )
+        self.agentic_field = multiline(NSMakeRect(20, 56, 380, 86), self.profile.get("agenticFacts", ""))
+        self.body.addSubview_(self.agentic_field["scroll"])
         self.body.addSubview_(pill("Launch overlay", NSMakeRect(20, 18, 160, 32), a, "launch:", "sage"))
         self.body.addSubview_(pill("Load briefing", NSMakeRect(190, 18, 120, 32), a, "loadBriefing:", "ghost"))
         self.body.addSubview_(pill("Settings", NSMakeRect(320, 18, 80, 32), a, "showSettings:", "ghost"))
@@ -587,6 +597,7 @@ class HUD:
         self.profile["role"] = str(self.role_field.stringValue())
         self.profile["resume"] = str(self.resume_field["tv"].string())
         self.profile["jobDescription"] = str(self.job_field["tv"].string())
+        self.profile["agenticFacts"] = str(self.agentic_field["tv"].string())
         engine.save_profile(self.profile)
         self.transcript = []
         self.mock_i = 0

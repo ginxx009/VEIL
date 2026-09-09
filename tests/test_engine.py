@@ -232,3 +232,30 @@ def test_repair_asr_agentic_and_cursor():
     assert "agentic coding" in low
     assert "cursor" in low
     assert "claude code" in low
+
+
+def test_repair_asr_agents_including_and_older_cars():
+    raw = (
+        "hands on experience with agents including specifically how many years "
+        "have you been working with older cars are Claude Code a GitHub Copilot"
+    )
+    low = engine.repair_asr(raw).lower()
+    assert "agentic coding" in low
+    assert "cursor" in low
+
+
+def test_agentic_facts_override_resume():
+    profile = {
+        "displayName": "Dexter",
+        "role": "Principal Engineer",
+        "resume": "TypeScript, AWS.",
+        "agenticFacts": "5 years agentic. Cursor CLI, Claude Code, Dynaskills personas. Not Copilot-only.",
+        "jobDescription": "Principal Engineer. Agentic coding.",
+        "mode": "interview",
+    }
+    system, user = engine._assist_prompts(
+        profile, "", "how many years with Cursor and Claude Code", "answer", ""
+    )
+    assert "HARD FACTS" in user
+    assert "Dynaskills" in user
+    assert "Never say you have not used a tool that is in HARD FACTS" in system
