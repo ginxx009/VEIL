@@ -356,6 +356,9 @@ JARGON = (
     "PostgreSQL",
     "technical debt",
     "buy-in",
+    "MuleSoft",
+    "API Manager",
+    "Next.js",
 )
 
 
@@ -430,7 +433,9 @@ _ASR_FIXES = (
     ("going down future delivery", "slowing down feature delivery"),
     ("are you secured engineering", "how you secured engineering"),
     ("technical death", "technical debt"),
-    ("tech debt", "tech debt"),
+    ("mule soft", "MuleSoft"),
+    ("mulesoft", "MuleSoft"),
+    ("api manager", "API Manager"),
 )
 
 
@@ -498,7 +503,7 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         "- Do not describe agentic coding as generating boilerplate or autocomplete. That is the answer this interviewer is screening out.\n"
         "- Name a real constraint only if it belongs in that design answer (limits, sharing, latency, cost).\n"
         "- If the question is vague, say what you'd need to know — do not pad with an anecdote.\n"
-        "- Never claim Next.js, Python, Laravel, Spark, or Oracle unless HARD FACTS, PRODUCTS, DATA, LEADERSHIP, or the resume names them. Adjacent is fine: React/React Native for UI, PHP→Node for legacy, Kafka for pipelines. Do not invent a Next app.\n"
+        "- Never claim Next.js, Python, Laravel, Spark, or Oracle unless HARD FACTS, PRODUCTS, DATA, LEADERSHIP, or the resume names them. If PRODUCTS includes API Manager / MuleSoft / Next.js, that IS the Next.js production story — do not say you have no Next.js. Adjacent is fine: React Native for mobile, PHP→Node for legacy, Kafka for pipelines.\n"
         "- No: furthermore, leverage, utilize, robust, seamless, passionate, circling back.\n"
         "- No markdown, bullets, numbered points, JSON, or labels.\n"
         f"- {draw_rule}\n"
