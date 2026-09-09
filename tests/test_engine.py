@@ -314,8 +314,8 @@ def test_repair_asr_tech_debt_buyin():
         "are you secured engineering Biane"
     )
     low = engine.repair_asr(raw).lower()
-    assert "slowing down future delivery" in low
-    assert "its resolution" in low
+    assert "slowing down feature delivery" in low
+    assert "its refactoring" in low
     assert "buy-in" in low
 
 
