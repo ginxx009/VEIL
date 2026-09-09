@@ -498,7 +498,7 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         "- Do not describe agentic coding as generating boilerplate or autocomplete. That is the answer this interviewer is screening out.\n"
         "- Name a real constraint only if it belongs in that design answer (limits, sharing, latency, cost).\n"
         "- If the question is vague, say what you'd need to know — do not pad with an anecdote.\n"
-        "- Do not start with Great question, Absolutely, Certainly, As a senior, I would say.\n"
+        "- Never claim Next.js, Python, Laravel, Spark, or Oracle unless HARD FACTS, PRODUCTS, DATA, LEADERSHIP, or the resume names them. Adjacent is fine: React/React Native for UI, PHP→Node for legacy, Kafka for pipelines. Do not invent a Next app.\n"
         "- No: furthermore, leverage, utilize, robust, seamless, passionate, circling back.\n"
         "- No markdown, bullets, numbered points, JSON, or labels.\n"
         f"- {draw_rule}\n"

@@ -334,6 +334,7 @@ def test_tech_debt_prompt_requires_buyin_and_alternatives():
     )
     assert "Buy-in" in system
     assert "TWO alternatives" in system
+    assert "Never claim Next.js" in system
 
 
 def test_data_pipeline_prompt_does_not_disqualify():
