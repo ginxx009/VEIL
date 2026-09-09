@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+early_access: false
+reviews:
+  profile: chill
+  high_level_summary: true
+  poem: false
+  review_status: true
+  request_changes_workflow: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+  path_filters:
+    - "!marketing/**"
+    - "!screenshots/**"
+    - "!artifacts/**"
+    - "!icons/**"
+    - "!**/*.png"
+    - "!**/*.jpg"
+    - "!**/*.jpeg"
+    - "!**/*.ico"
+    - "!**/*.icns"
+    - "!**/*.dmg"
+    - "!**/*.exe"
+    - "!dist/**"
+    - "!build/**"
+    - "!**/.venv/**"
+    - "!**/__pycache__/**"
+  path_instructions:
+    - path: "mac/engine.py"
+      instructions: >
+        This is the interview copilot brain. Flag if a change makes VEIL
+        volunteer a war story, example, or draw.io/whiteboard coaching unless
+        the user explicitly asked. Do not suggest adding more prompt fluff.
+    - path: "mac/VEIL.py"
+      instructions: >
+        Native AppKit overlay. Keep NSWindowSharingNone stealth. Do not suggest
+        switching to a browser UI.
+    - path: "windows/**"
+      instructions: >
+        Windows overlay must keep WDA_EXCLUDEFROMCAPTURE. Match Mac behaviour,
+        don't invent extra settings screens.
+    - path: "tests/**"
+      instructions: >
+        Tests must stay offline (no live API calls). Prefer pytest.
+knowledge_base:
+  learnings:
+    scope: auto
+chat:
+  auto_reply: true
