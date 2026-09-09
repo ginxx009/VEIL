@@ -319,6 +319,7 @@ def test_data_pipeline_prompt_does_not_disqualify():
         "mode": "interview",
     }
     system, user = engine._assist_prompts(profile, "", "tell me about ETL pipelines", "answer", "")
+    assert "TWO alternatives" in system
     assert "Do NOT open with" in system
     assert "DATA / ETL" in user
     assert "Kafka" in system or "Kafka" in user
