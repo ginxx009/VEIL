@@ -355,7 +355,6 @@ JARGON = (
     "event sourcing",
     "PostgreSQL",
 )
-)
 
 
 def speech_hints(profile: dict | None = None) -> list[str]:
