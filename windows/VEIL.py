@@ -369,9 +369,13 @@ class HUD:
 
     def _heard_final(self, text: str):
         def go():
-            cleaned = text.strip()
+            cleaned = engine.repair_asr(text.strip())
             self.hearing = ""
-            if len(cleaned) < 4:
+            if not engine.looks_like_utterance(cleaned):
+                print(f"VEIL skip (too short / filler): {cleaned}", flush=True)
+                if hasattr(self, "prompt"):
+                    self.prompt.delete(0, "end")
+                    self.prompt.insert(0, cleaned)
                 return
             print(f"VEIL assist on: {cleaned}", flush=True)
             self.transcript.append(f"them: {cleaned}")

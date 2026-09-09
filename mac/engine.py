@@ -365,6 +365,37 @@ def looks_like_utterance(text: str) -> bool:
     return len(t.split()) >= 5
 
 
+# Live speech often mangles the words this interview is built on.
+_ASR_FIXES = (
+    ("agency coding", "agentic coding"),
+    ("agency coating", "agentic coding"),
+    ("agent see coding", "agentic coding"),
+    ("a gentic coding", "agentic coding"),
+    ("sue's like hers are", "tools like Cursor"),
+    ("sues like hers are", "tools like Cursor"),
+    ("tools like hers are", "tools like Cursor"),
+    ("hers are claude", "Cursor, Claude"),
+    ("git hub copilot", "GitHub Copilot"),
+    ("github co pilot", "GitHub Copilot"),
+    ("clod code", "Claude Code"),
+    ("clawed code", "Claude Code"),
+    ("next js", "Next.js"),
+    ("type script", "TypeScript"),
+)
+
+
+def repair_asr(text: str) -> str:
+    out = text or ""
+    low = out.lower()
+    for src, dst in _ASR_FIXES:
+        i = low.find(src)
+        while i >= 0:
+            out = out[:i] + dst + out[i + len(src) :]
+            low = out.lower()
+            i = low.find(src, i + len(dst))
+    return out
+
+
 def _assist_prompts(profile, transcript, question, kind, screen_text):
     name = profile.get("displayName") or "the candidate"
     role = profile.get("role") or "senior engineer"
@@ -405,6 +436,8 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         "- Do NOT invent a personal example. Use the resume only. For Principal / agentic questions about experience or ownership, one resume-backed example is allowed.\n"
         "- Ground facts in the resume. NEVER invent a percent, dollar amount, headcount, or years that are not written in the resume. If there is no number, do not make one up.\n"
         "- Agentic coding: name the real tools on the resume (Cursor, Claude Code, Copilot, etc.) and the workflow (how the team used it, review, tests, human sign-off). Do not substitute generic 'standards and unit-test gating' unless that is on the resume.\n"
+        "- If they asked years / which tools / impact: answer those three from the resume. If a named tool is not on the resume, say you have not used that one — do not invent years on Copilot or Cursor.\n"
+        "- Do not describe agentic coding as generating boilerplate or autocomplete. That is the answer this interviewer is screening out.\n"
         "- Name a real constraint only if it belongs in that design answer (limits, sharing, latency, cost).\n"
         "- If the question is vague, say what you'd need to know — do not pad with an anecdote.\n"
         "- Do not start with Great question, Absolutely, Certainly, As a senior, I would say.\n"

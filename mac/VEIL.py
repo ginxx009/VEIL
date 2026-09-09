@@ -640,7 +640,7 @@ class HUD:
             self._paint_answer()
 
     def _heard_final(self, text: str):
-        cleaned = text.strip()
+        cleaned = engine.repair_asr(text.strip())
         self.hearing = ""
         if not engine.looks_like_utterance(cleaned):
             print(f"VEIL skip (too short / filler): {cleaned}", flush=True)

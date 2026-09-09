@@ -219,3 +219,16 @@ def test_prompt_forbids_invented_metrics():
     assert "NEVER invent a percent" in system
     assert "speech-to-text" in system
     assert "Agentic coding" in system
+    assert "boilerplate" in system.lower()
+
+
+def test_repair_asr_agentic_and_cursor():
+    raw = (
+        "hands on experience with agency coding specifically how many years "
+        "have you been working with Sue's like hers are Claude Code or GitHub Copilot"
+    )
+    fixed = engine.repair_asr(raw)
+    low = fixed.lower()
+    assert "agentic coding" in low
+    assert "cursor" in low
+    assert "claude code" in low
