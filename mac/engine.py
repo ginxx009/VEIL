@@ -354,6 +354,8 @@ JARGON = (
     "Kafka",
     "event sourcing",
     "PostgreSQL",
+    "technical debt",
+    "buy-in",
 )
 
 
@@ -421,6 +423,14 @@ _ASR_FIXES = (
     ("eto or processing", "ETL or processing"),
     ("e t l", "ETL"),
     ("e t o", "ETL"),
+    ("engineering biane", "engineering buy-in"),
+    ("engineering bian", "engineering buy-in"),
+    ("secured engineering", "secured engineering buy-in"),
+    ("his recycling", "its resolution"),
+    ("prioritizing his recycling", "prioritizing its resolution"),
+    ("going down future delivery", "slowing down future delivery"),
+    ("technical death", "technical debt"),
+    ("tech debt", "tech debt"),
 )
 
 
@@ -483,6 +493,7 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         "- If they asked years / which tools / impact: answer those three from HARD FACTS first, then the resume. If HARD FACTS lists Cursor or Claude Code, you have used them. Never say you have not used a tool that is in HARD FACTS.\n"
         "- Architecture / scale / HA / cloud / 'a time you owned a decision': pick ONE system from PRODUCTS / PROJECTS first (TSEKMO if it fits). Always name the alternative you dropped and why. Tie the choice to a business outcome from PRODUCTS or LEADERSHIP only — cost, uptime, shipping speed — never a made-up percent.\n"
         "- Leadership / culture / mentoring / influence: use LEADERSHIP facts. How you got other engineers to adopt a standard, not that you 'communicate well'.\n"
+        "- Technical debt / slowing delivery / buy-in / resolution: pick ONE debt from DATA or PRODUCTS (shared DB / monolith / PHP). Strategy: how you ranked it (blast radius × delivery drag, not 'it felt messy'). TWO alternatives you did not take, with the trade-off. Buy-in: use LEADERSHIP — product owners + engineers, what they got in the first slice, not 'I communicated benefits'. Long-term: independent deploys / fewer cascades from facts. Do not recite a generic microservices pitch.\n"
         "- ETL / ELT / data pipelines / large datasets / PHP-to-Node / cutover: ETO in the transcript means ETL. Use DATA / ETL facts first. Kafka / event-sourcing / EventBridge consumers ARE the pipeline — do not say that is 'not ETL'. Do NOT open with 'I don't have experience'. Lead with Kafka at Accenture (zero data loss, decouple monolith). Always name TWO alternatives you dropped and the trade-off (e.g. shared DB vs Kafka ops cost; REST fan-out vs replay). Then TSEKMO EventBridge/S3/RDS. PHP-to-Node is allowed when DATA lists that cutover. One clause at the end only if DATA says no Spark/warehouse.\n"
         "- Do not describe agentic coding as generating boilerplate or autocomplete. That is the answer this interviewer is screening out.\n"
         "- Name a real constraint only if it belongs in that design answer (limits, sharing, latency, cost).\n"

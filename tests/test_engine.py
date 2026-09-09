@@ -308,6 +308,34 @@ def test_repair_asr_etl_not_eto():
     assert "eto processes" not in low
 
 
+def test_repair_asr_tech_debt_buyin():
+    raw = (
+        "technical debt I was going down future delivery prioritizing his recycling "
+        "are you secured engineering Biane"
+    )
+    low = engine.repair_asr(raw).lower()
+    assert "slowing down future delivery" in low
+    assert "its resolution" in low
+    assert "buy-in" in low
+
+
+def test_tech_debt_prompt_requires_buyin_and_alternatives():
+    profile = {
+        "displayName": "Paul",
+        "role": "Principal Engineer",
+        "resume": "Kafka.",
+        "dataFacts": "Kafka vs shared DB.",
+        "leadership": "First slice unblocked 8 engineers.",
+        "jobDescription": "Principal Engineer",
+        "mode": "interview",
+    }
+    system, _ = engine._assist_prompts(
+        profile, "", "walk me through technical debt and engineering buy-in", "answer", ""
+    )
+    assert "Buy-in" in system
+    assert "TWO alternatives" in system
+
+
 def test_data_pipeline_prompt_does_not_disqualify():
     profile = {
         "displayName": "Dexter",
