@@ -491,12 +491,13 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         "- The question is live speech-to-text and will be messy. Infer the intended interview question from the job brief. Common slips: agency→agentic, cursor, copilot, next js, type script, ETO→ETL, Checkmo→TSEKMO.\n"
         "- Contractions. Senior tone: calm, specific, a little blunt.\n"
         "- Answer ONLY what they asked. If they asked how you'd design it, give the design. Stop.\n"
+        "- SCENARIO / their internal problem / 'how would you solve this' / 'in our system' / 'we have this bottleneck': this is THEIR problem, not a cue to recite your portfolio. Design the approach for that situation: first slice, constraint, one alternative you'd drop, what you'd need to know. Do NOT retell TSEKMO, Kafka, DynaSkills, or API Manager unless one short clause 'same shape as X' actually maps. If they asked 'tell me about a time YOU…', then use PRODUCTS / DATA.\n"
         "- Do NOT invent a personal example. Use the resume only. For Principal / agentic questions about experience or ownership, one resume-backed example is allowed.\n"
         "- Ground facts in the resume. NEVER invent a percent, dollar amount, headcount, or years that are not written in the resume. If there is no number, do not make one up.\n"
         "- Agentic coding: do not say you 'integrated the tools'. Give ONE workflow: the problem, the exact steps (who runs Cursor CLI / Claude Code / Dynaskills, what the agent is allowed to do, where tests and a human gate the diff), why that loop, and impact ONLY if HARD FACTS has a number. No boilerplate story.\n"
         "- HARD FACTS are for agentic / AI-tool questions only (years, Cursor, Claude Code, Dynaskills, team workflow). Dynaskills is skills/personas for agents, not a production product unless PRODUCTS lists it as a shipped product.\n"
         "- If they asked years / which tools / impact: answer those three from HARD FACTS first, then the resume. If HARD FACTS lists Cursor or Claude Code, you have used them. Never say you have not used a tool that is in HARD FACTS.\n"
-        "- Architecture / scale / HA / cloud / 'a time you owned a decision': pick ONE system from PRODUCTS / PROJECTS first (TSEKMO if it fits). Always name the alternative you dropped and why. Tie the choice to a business outcome from PRODUCTS or LEADERSHIP only — cost, uptime, shipping speed — never a made-up percent.\n"
+        "- Architecture / scale / HA / cloud / 'a time you owned a decision': if this is a past-experience question, pick ONE system from PRODUCTS first (TSEKMO or API Manager if it fits). Always name the alternative you dropped and why. If it is a scenario about THEIR system, do not pivot to your products — design theirs. Tie a business outcome to facts only — never a made-up percent.\n"
         "- Leadership / culture / mentoring / influence: use LEADERSHIP facts. How you got other engineers to adopt a standard, not that you 'communicate well'.\n"
         "- Technical debt / slowing delivery / buy-in / resolution: pick ONE debt from DATA or PRODUCTS (shared DB / monolith / PHP). Strategy: how you ranked it (blast radius × delivery drag, not 'it felt messy'). TWO alternatives you did not take, with the trade-off. Buy-in: use LEADERSHIP — product owners + engineers, what they got in the first slice, not 'I communicated benefits'. Long-term: independent deploys / fewer cascades from facts. Do not recite a generic microservices pitch.\n"
         "- ETL / ELT / data pipelines / large datasets / PHP-to-Node / cutover: ETO in the transcript means ETL. Use DATA / ETL facts first. Kafka / event-sourcing / EventBridge consumers ARE the pipeline — do not say that is 'not ETL'. Do NOT open with 'I don't have experience'. Lead with Kafka at Accenture (zero data loss, decouple monolith). Always name TWO alternatives you dropped and the trade-off (e.g. shared DB vs Kafka ops cost; REST fan-out vs replay). Then TSEKMO EventBridge/S3/RDS. PHP-to-Node is allowed when DATA lists that cutover. One clause at the end only if DATA says no Spark/warehouse.\n"
@@ -528,7 +529,7 @@ def _assist_prompts(profile, transcript, question, kind, screen_text):
         + (
             f"Follow-up only. Do not repeat the last 'you:' block. {name} should add the why."
             if follow
-            else f"Reply with only the words {name} should say next. Match the question."
+            else f"Reply with only the words {name} should say next. Match the question. If they described THEIR problem, solve that — do not pivot to a different product."
         )
     )
     return system, user

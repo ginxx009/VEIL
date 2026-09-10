@@ -337,6 +337,27 @@ def test_tech_debt_prompt_requires_buyin_and_alternatives():
     assert "Never claim Next.js" in system
 
 
+def test_scenario_prompt_does_not_force_portfolio():
+    profile = {
+        "displayName": "Paul",
+        "role": "Principal Engineer",
+        "resume": "Kafka.",
+        "projects": "TSEKMO Lambda sockets.",
+        "jobDescription": "Principal Engineer",
+        "mode": "interview",
+    }
+    system, user = engine._assist_prompts(
+        profile,
+        "",
+        "we have a latency problem in our checkout, how would you solve it",
+        "answer",
+        "",
+    )
+    assert "SCENARIO" in system
+    assert "not a cue to recite your portfolio" in system
+    assert "Design the approach for that situation" in system
+
+
 def test_data_pipeline_prompt_does_not_disqualify():
     profile = {
         "displayName": "Dexter",
