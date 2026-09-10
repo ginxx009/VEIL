@@ -1,6 +1,6 @@
 # Contributing to VEIL
 
-Fork, branch, open a pull request. **Do not push to `main`.**
+Work on a branch. Do not push commits to `main`. Open a pull request.
 
 `main` is protected:
 

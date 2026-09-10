@@ -65,7 +65,7 @@ from PyObjCTools import AppHelper
 import engine
 import listen
 
-W, H = 420, 580
+W, H = 420, 840
 CHROME = 44
 FOOTER = 52
 
@@ -221,6 +221,9 @@ class Actions(NSObject):
     def importResume_(self, sender):
         self.hud.import_resume()
 
+    def loadBriefing_(self, sender):
+        self.hud.load_briefing()
+
 
 class HUD:
     def __init__(self, actions: Actions):
@@ -238,6 +241,12 @@ class HUD:
         self.hearing = ""
         self.listener = None
         self.pending_q = None
+        self.pending_kind = None
+        self.anchor_q = ""
+        self.anchor_a = ""
+        self.followups = []
+        self.follow_q = ""
+        self.draft_follow = ""
 
     def boot(self):
         self._build_panel()
@@ -344,13 +353,54 @@ class HUD:
         y -= 78
         self.body.addSubview_(label("Resume / playbook", NSMakeRect(20, y, 240, 16), 11, muted=True))
         self.body.addSubview_(pill("Import file", NSMakeRect(268, y - 4, 112, 24), a, "importResume:", "ghost"))
-        self.resume_field = multiline(NSMakeRect(20, 168, 380, y - 20 - 168), self.profile.get("resume", ""))
+        self.resume_field = multiline(NSMakeRect(20, 364, 380, y - 20 - 364), self.profile.get("resume", ""))
         self.body.addSubview_(self.resume_field["scroll"])
-        self.body.addSubview_(label("Job or meeting context", NSMakeRect(20, 148, 380, 16), 11, muted=True))
-        self.job_field = multiline(NSMakeRect(20, 64, 380, 80), self.profile.get("jobDescription", ""))
+        self.body.addSubview_(label("Job or meeting context", NSMakeRect(20, 344, 380, 16), 11, muted=True))
+        self.job_field = multiline(NSMakeRect(20, 312, 380, 30), self.profile.get("jobDescription", ""))
         self.body.addSubview_(self.job_field["scroll"])
+        self.body.addSubview_(
+            label(
+                "Agentic facts — years, Cursor CLI, Claude Code, Dynaskills. Not a product.",
+                NSMakeRect(20, 292, 380, 16),
+                11,
+                muted=True,
+            )
+        )
+        self.agentic_field = multiline(NSMakeRect(20, 246, 380, 44), self.profile.get("agenticFacts", ""))
+        self.body.addSubview_(self.agentic_field["scroll"])
+        self.body.addSubview_(
+            label(
+                "Products / projects — TSEKMO first: why, alternative dropped, how it lasts.",
+                NSMakeRect(20, 226, 380, 16),
+                11,
+                muted=True,
+            )
+        )
+        self.projects_field = multiline(NSMakeRect(20, 176, 380, 48), self.profile.get("projects", ""))
+        self.body.addSubview_(self.projects_field["scroll"])
+        self.body.addSubview_(
+            label(
+                "Leadership — how you changed the team, mentored, got a standard adopted.",
+                NSMakeRect(20, 156, 380, 16),
+                11,
+                muted=True,
+            )
+        )
+        self.leadership_field = multiline(NSMakeRect(20, 118, 380, 36), self.profile.get("leadership", ""))
+        self.body.addSubview_(self.leadership_field["scroll"])
+        self.body.addSubview_(
+            label(
+                "Data / ETL — EventBridge, S3, RDS, PHP→Node cutover. ETO means ETL.",
+                NSMakeRect(20, 98, 380, 16),
+                11,
+                muted=True,
+            )
+        )
+        self.data_field = multiline(NSMakeRect(20, 54, 380, 42), self.profile.get("dataFacts", ""))
+        self.body.addSubview_(self.data_field["scroll"])
         self.body.addSubview_(pill("Launch overlay", NSMakeRect(20, 18, 160, 32), a, "launch:", "sage"))
-        self.body.addSubview_(pill("Settings", NSMakeRect(190, 18, 90, 32), a, "showSettings:", "ghost"))
+        self.body.addSubview_(pill("Load briefing", NSMakeRect(190, 18, 120, 32), a, "loadBriefing:", "ghost"))
+        self.body.addSubview_(pill("Settings", NSMakeRect(320, 18, 80, 32), a, "showSettings:", "ghost"))
 
     def show_live(self):
         self.phase = "live"
@@ -473,8 +523,10 @@ class HUD:
             self.answer_view.setTextColor_(COL_RED)
             return
         if self.status == "thinking":
-            self.answer_view.setString_("Writing a speakable answer…")
-            self.answer_view.setTextColor_(COL_MUTED)
+            held = self._compose_board()
+            msg = (held + "\n\nAdding…") if held else "Writing a speakable answer…"
+            self.answer_view.setString_(msg)
+            self.answer_view.setTextColor_(COL_MUTED if not held else COL_TEXT)
             return
         if self.listening and self.hearing:
             self.answer_view.setTextColor_(COL_MUTED)
@@ -575,6 +627,10 @@ class HUD:
         self.profile["role"] = str(self.role_field.stringValue())
         self.profile["resume"] = str(self.resume_field["tv"].string())
         self.profile["jobDescription"] = str(self.job_field["tv"].string())
+        self.profile["agenticFacts"] = str(self.agentic_field["tv"].string())
+        self.profile["projects"] = str(self.projects_field["tv"].string())
+        self.profile["leadership"] = str(self.leadership_field["tv"].string())
+        self.profile["dataFacts"] = str(self.data_field["tv"].string())
         engine.save_profile(self.profile)
         self.transcript = []
         self.mock_i = 0
@@ -582,6 +638,11 @@ class HUD:
         self.result = None
         self.error = None
         self.started = time.time()
+        self.anchor_q = ""
+        self.anchor_a = ""
+        self.followups = []
+        self.follow_q = ""
+        self.draft_follow = ""
         self._stop_mic()
         self.show_live()
 
@@ -594,7 +655,12 @@ class HUD:
             return
         self.listening = True
         self.hearing = ""
-        self.listener = listen.Listener(self._heard_partial, self._heard_final, self._heard_error)
+        self.listener = listen.Listener(
+            self._heard_partial,
+            self._heard_final,
+            self._heard_error,
+            hints=engine.speech_hints(self.profile),
+        )
         self.show_live()
         self.listener.start()
 
@@ -618,9 +684,12 @@ class HUD:
             self._paint_answer()
 
     def _heard_final(self, text: str):
-        cleaned = text.strip()
+        cleaned = engine.repair_asr(text.strip())
         self.hearing = ""
-        if len(cleaned) < 4:
+        if not engine.looks_like_utterance(cleaned):
+            print(f"VEIL skip (too short / filler): {cleaned}", flush=True)
+            if hasattr(self, "prompt"):
+                self.prompt.setStringValue_(cleaned)
             return
         print(f"VEIL assist on: {cleaned}", flush=True)
         self.transcript.append(f"them: {cleaned}")
@@ -628,6 +697,7 @@ class HUD:
             self.prompt.setStringValue_(cleaned)
         if self.status == "thinking":
             self.pending_q = cleaned
+            self.pending_kind = "answer"
             return
         self._run("answer", cleaned, "")
 
@@ -644,13 +714,38 @@ class HUD:
         if self.phase == "live":
             self._paint_answer()
 
+    def _compose_board(self) -> str:
+        parts = []
+        if self.anchor_q:
+            parts.append(self.anchor_q)
+        if self.anchor_a:
+            parts.append(self.anchor_a)
+        for fq, fa in self.followups:
+            parts.append(f"— {fq}\n{fa}")
+        if self.draft_follow:
+            label = self.follow_q or "follow-up"
+            parts.append(f"— {label}\n{self.draft_follow}")
+        return "\n\n".join(p for p in parts if p).strip()
+
     def _run(self, kind, question, screen_text):
         if self.status == "thinking":
             self.pending_q = question
+            self.pending_kind = kind
             return
+        follow = kind == "followup"
+        if not follow:
+            self.anchor_q = question
+            self.anchor_a = ""
+            self.followups = []
+            self.follow_q = ""
+            self.draft_follow = ""
+        else:
+            self.follow_q = question
+            self.draft_follow = ""
         self.status = "thinking"
         self.error = None
-        self.result = {"spoken": "", "points": [], "code": ""}
+        if not follow:
+            self.result = {"spoken": "", "points": [], "code": ""}
         self._paint_answer()
         packed = "\n".join(self.transcript)
         profile = dict(self.profile)
@@ -662,18 +757,33 @@ class HUD:
                     acc.append(chunk)
                     text = "".join(acc)
 
-                    def paint(t=text):
-                        self.result = {"spoken": t, "points": [], "code": ""}
+                    def paint(t=text, f=follow):
+                        if f:
+                            self.draft_follow = t
+                        else:
+                            self.anchor_a = t
+                        self.result = {"spoken": self._compose_board(), "points": [], "code": ""}
                         self._paint_answer()
 
                     AppHelper.callAfter(paint)
 
                 def done():
+                    if follow:
+                        if self.draft_follow.strip():
+                            self.followups.append((self.follow_q, self.draft_follow.strip()))
+                            self.transcript.append(f"you: {self.draft_follow.strip()}")
+                        self.draft_follow = ""
+                    else:
+                        if self.anchor_a.strip():
+                            self.transcript.append(f"you: {self.anchor_a.strip()}")
+                    self.result = {"spoken": self._compose_board(), "points": [], "code": ""}
                     self.status = "ready"
                     nxt = self.pending_q
+                    nxt_kind = getattr(self, "pending_kind", "answer") or "answer"
                     self.pending_q = None
+                    self.pending_kind = None
                     if nxt:
-                        self._run("answer", nxt, "")
+                        self._run(nxt_kind, nxt, "")
 
                 AppHelper.callAfter(done)
             except Exception as e:
@@ -684,9 +794,11 @@ class HUD:
                     self.error = m
                     self._paint_answer()
                     nxt = self.pending_q
+                    nxt_kind = getattr(self, "pending_kind", "answer") or "answer"
                     self.pending_q = None
+                    self.pending_kind = None
                     if nxt:
-                        self._run("answer", nxt, "")
+                        self._run(nxt_kind, nxt, "")
 
                 AppHelper.callAfter(fail)
 
@@ -717,7 +829,24 @@ class HUD:
     def assist(self):
         if self.phase != "live":
             return
-        self._run("answer", str(self.prompt.stringValue()), "")
+        q = str(self.prompt.stringValue()).strip()
+        if not q:
+            return
+        kind = "followup" if (self.anchor_a or "").strip() else "answer"
+        self._run(kind, q, "")
+
+    def load_briefing(self):
+        try:
+            text = engine.load_briefing("principal-engineer")
+        except Exception as e:
+            print(f"VEIL briefing: {e}", flush=True)
+            return
+        self.profile["jobDescription"] = text
+        if not (self.profile.get("role") or "").strip():
+            self.profile["role"] = "Principal Engineer"
+        engine.save_profile(self.profile)
+        if self.phase == "setup":
+            self.show_setup()
 
     def import_resume(self):
         panel = NSOpenPanel.openPanel()

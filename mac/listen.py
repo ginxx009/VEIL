@@ -18,7 +18,7 @@ else:
     _IMPORT_ERROR = None
 
 # Pause after the last partial before we treat it as a finished question.
-UTTERANCE_PAUSE = 1.15
+UTTERANCE_PAUSE = 1.55
 
 
 def _host():
@@ -52,10 +52,11 @@ def _main(fn):
 
 
 class Listener:
-    def __init__(self, on_partial, on_final, on_error):
+    def __init__(self, on_partial, on_final, on_error, hints=None):
         self.on_partial = on_partial
         self.on_final = on_final
         self.on_error = on_error
+        self.hints = [str(h) for h in (hints or []) if str(h).strip()]
         self.running = False
         self._engine = None
         self._request = None
@@ -205,9 +206,18 @@ class Listener:
         request = SFSpeechAudioBufferRecognitionRequest.alloc().init()
         request.setShouldReportPartialResults_(True)
         try:
-            request.setTaskHint_(1)
+            request.setTaskHint_(1)  # dictation
         except Exception:
             pass
+        try:
+            request.setAddsPunctuation_(True)
+        except Exception:
+            pass
+        if self.hints:
+            try:
+                request.setContextualStrings_(self.hints[:80])
+            except Exception as e:
+                print(f"VEIL: speech hints skipped ({e})", flush=True)
         self._request = request
 
         def handler(result, error):
